@@ -1,0 +1,12 @@
+{
+  "name": "tagline-sh",
+  "version": "0.0.0",
+  "description": "Open-source GitHub-native AI agent that configure and automates the thinking step of the software release process — not just the mechanics",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "Moeen Mahmud",
+  "license": "ISC",
+  "packageManager": "pnpm@10.22.0"
+}
