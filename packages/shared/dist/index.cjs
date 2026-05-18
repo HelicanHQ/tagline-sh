@@ -1,0 +1,271 @@
+"use strict";
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// src/index.ts
+var index_exports = {};
+__export(index_exports, {
+  AI_DEFAULTS: () => AI_DEFAULTS,
+  APP_DISPLAY_NAME: () => APP_DISPLAY_NAME,
+  APP_PACKAGE_NAME: () => APP_PACKAGE_NAME,
+  BOT_GIT_IDENTITY: () => BOT_GIT_IDENTITY,
+  BUMP_PRIORITY: () => BUMP_PRIORITY,
+  BumpTypeSchema: () => BumpTypeSchema,
+  COMMIT_TYPE_BUMP: () => COMMIT_TYPE_BUMP,
+  CommitTypeSchema: () => CommitTypeSchema,
+  DEFAULT_CONFIG: () => DEFAULT_CONFIG,
+  MonorepoInfoSchema: () => MonorepoInfoSchema,
+  MonorepoTypeSchema: () => MonorepoTypeSchema,
+  PackageInfoSchema: () => PackageInfoSchema,
+  ParsedCommitSchema: () => ParsedCommitSchema,
+  ParsedPRSchema: () => ParsedPRSchema,
+  RELEASE_WORKFLOW_FILE: () => RELEASE_WORKFLOW_FILE,
+  ReleasePlanSchema: () => ReleasePlanSchema,
+  ReleaseResultSchema: () => ReleaseResultSchema,
+  RepoConfigSchema: () => RepoConfigSchema,
+  aggregateBumps: () => aggregateBumps,
+  excerpt: () => excerpt,
+  extractTickets: () => extractTickets,
+  maxBump: () => maxBump,
+  parseReleasePlan: () => parseReleasePlan,
+  releaseBranchName: () => releaseBranchName,
+  releaseTagName: () => releaseTagName
+});
+module.exports = __toCommonJS(index_exports);
+
+// src/constants.ts
+var APP_DISPLAY_NAME = "Tagline";
+var APP_PACKAGE_NAME = "tagline-sh";
+var BOT_GIT_IDENTITY = {
+  name: `${APP_PACKAGE_NAME}[bot]`,
+  email: `${APP_PACKAGE_NAME}[bot]@users.noreply.github.com`
+};
+var COMMIT_TYPE_BUMP = {
+  feat: "minor",
+  fix: "patch",
+  perf: "patch",
+  revert: "patch",
+  docs: "none",
+  style: "none",
+  refactor: "none",
+  test: "none",
+  build: "none",
+  ci: "none",
+  chore: "none"
+};
+var BUMP_PRIORITY = {
+  none: 0,
+  patch: 1,
+  minor: 2,
+  major: 3
+};
+var DEFAULT_CONFIG = {
+  branches: {
+    production: "main",
+    staging: "staging",
+    development: "develop"
+  },
+  preReleaseSuffix: {
+    staging: "rc",
+    development: "alpha"
+  },
+  releaseNotesStyle: "",
+  customContext: "",
+  rawContent: ""
+};
+var AI_DEFAULTS = {
+  baseUrl: "https://openrouter.ai/api/v1",
+  model: "openai/gpt-4o-mini"
+};
+var RELEASE_WORKFLOW_FILE = "release-agent.yml";
+
+// src/utils.ts
+function extractTickets(text) {
+  if (!text) return [];
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  const push = (raw) => {
+    const normalized = raw.trim();
+    if (!normalized) return;
+    if (seen.has(normalized)) return;
+    seen.add(normalized);
+    out.push(normalized);
+  };
+  const ghRe = /#\d+/g;
+  for (const match of text.matchAll(ghRe)) push(match[0]);
+  const projRe = /\b[A-Za-z][A-Za-z0-9]+-\d+\b/g;
+  for (const match of text.matchAll(projRe)) push(match[0]);
+  return out;
+}
+function releaseBranchName(version) {
+  const stripped = version.startsWith("v") ? version.slice(1) : version;
+  return `release/v${stripped}`;
+}
+function releaseTagName(version) {
+  return version.startsWith("v") ? version : `v${version}`;
+}
+function maxBump(a, b) {
+  return BUMP_PRIORITY[a] >= BUMP_PRIORITY[b] ? a : b;
+}
+function aggregateBumps(bumps) {
+  let acc = "none";
+  for (const b of bumps) acc = maxBump(acc, b);
+  return acc;
+}
+function excerpt(text, maxLen = 500) {
+  if (!text) return null;
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  if (trimmed.length <= maxLen) return trimmed;
+  const slice = trimmed.slice(0, maxLen);
+  const lastSpace = slice.lastIndexOf(" ");
+  return (lastSpace > maxLen * 0.6 ? slice.slice(0, lastSpace) : slice) + "\u2026";
+}
+
+// src/schemas.ts
+var import_zod = require("zod");
+var CommitTypeSchema = import_zod.z.enum([
+  "feat",
+  "fix",
+  "docs",
+  "style",
+  "refactor",
+  "perf",
+  "test",
+  "build",
+  "ci",
+  "chore",
+  "revert",
+  "breaking"
+]);
+var BumpTypeSchema = import_zod.z.enum(["major", "minor", "patch", "none"]);
+var MonorepoTypeSchema = import_zod.z.enum([
+  "pnpm-workspaces",
+  "npm-workspaces",
+  "yarn-workspaces",
+  "turborepo",
+  "nx",
+  "lerna",
+  "none"
+]);
+var ParsedCommitSchema = import_zod.z.object({
+  type: CommitTypeSchema,
+  scope: import_zod.z.string().nullable(),
+  subject: import_zod.z.string(),
+  body: import_zod.z.string().nullable(),
+  isBreaking: import_zod.z.boolean(),
+  sha: import_zod.z.string()
+});
+var ParsedPRSchema = import_zod.z.object({
+  number: import_zod.z.number().int().positive(),
+  title: import_zod.z.string(),
+  url: import_zod.z.string().url(),
+  author: import_zod.z.string(),
+  mergedAt: import_zod.z.string(),
+  commits: import_zod.z.array(ParsedCommitSchema),
+  tickets: import_zod.z.array(import_zod.z.string()),
+  suggestedBump: BumpTypeSchema,
+  bodyExcerpt: import_zod.z.string().nullable()
+});
+var PackageInfoSchema = import_zod.z.object({
+  name: import_zod.z.string(),
+  path: import_zod.z.string(),
+  currentVersion: import_zod.z.string(),
+  packageJsonPath: import_zod.z.string(),
+  changelogPath: import_zod.z.string(),
+  affectedPRs: import_zod.z.array(ParsedPRSchema)
+});
+var MonorepoInfoSchema = import_zod.z.object({
+  type: MonorepoTypeSchema,
+  packages: import_zod.z.array(PackageInfoSchema),
+  rootPackage: PackageInfoSchema.nullable()
+});
+var RepoConfigSchema = import_zod.z.object({
+  branches: import_zod.z.object({
+    production: import_zod.z.string(),
+    staging: import_zod.z.string().nullable(),
+    development: import_zod.z.string().nullable()
+  }),
+  preReleaseSuffix: import_zod.z.object({
+    staging: import_zod.z.string(),
+    development: import_zod.z.string()
+  }),
+  releaseNotesStyle: import_zod.z.string(),
+  customContext: import_zod.z.string(),
+  rawContent: import_zod.z.string()
+});
+var ReleasePlanSchema = import_zod.z.object({
+  repoOwner: import_zod.z.string().min(1),
+  repoName: import_zod.z.string().min(1),
+  baseBranch: import_zod.z.string().min(1),
+  bumpType: BumpTypeSchema,
+  currentVersion: import_zod.z.string().min(1),
+  nextVersion: import_zod.z.string().min(1),
+  lastTag: import_zod.z.string().nullable(),
+  prs: import_zod.z.array(ParsedPRSchema),
+  changelogContent: import_zod.z.string(),
+  isMonorepo: import_zod.z.boolean(),
+  monorepoInfo: MonorepoInfoSchema.nullable(),
+  isDraft: import_zod.z.boolean(),
+  isDryRun: import_zod.z.boolean(),
+  issueNumber: import_zod.z.number().int().nonnegative(),
+  approvedBy: import_zod.z.string(),
+  approvedAt: import_zod.z.string()
+});
+var ReleaseResultSchema = import_zod.z.object({
+  success: import_zod.z.boolean(),
+  nextVersion: import_zod.z.string(),
+  tagName: import_zod.z.string(),
+  releaseUrl: import_zod.z.string().nullable(),
+  prUrl: import_zod.z.string().nullable(),
+  error: import_zod.z.string().nullable(),
+  isDryRun: import_zod.z.boolean()
+});
+function parseReleasePlan(json) {
+  const data = JSON.parse(json);
+  return ReleasePlanSchema.parse(data);
+}
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  AI_DEFAULTS,
+  APP_DISPLAY_NAME,
+  APP_PACKAGE_NAME,
+  BOT_GIT_IDENTITY,
+  BUMP_PRIORITY,
+  BumpTypeSchema,
+  COMMIT_TYPE_BUMP,
+  CommitTypeSchema,
+  DEFAULT_CONFIG,
+  MonorepoInfoSchema,
+  MonorepoTypeSchema,
+  PackageInfoSchema,
+  ParsedCommitSchema,
+  ParsedPRSchema,
+  RELEASE_WORKFLOW_FILE,
+  ReleasePlanSchema,
+  ReleaseResultSchema,
+  RepoConfigSchema,
+  aggregateBumps,
+  excerpt,
+  extractTickets,
+  maxBump,
+  parseReleasePlan,
+  releaseBranchName,
+  releaseTagName
+});
+//# sourceMappingURL=index.cjs.map
