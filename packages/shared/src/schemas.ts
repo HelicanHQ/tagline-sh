@@ -17,6 +17,8 @@ export const CommitTypeSchema = z.enum([
     'chore',
     'revert',
     'breaking',
+    'hotfix',
+    'release',
 ]);
 
 export const BumpTypeSchema = z.enum(['major', 'minor', 'patch', 'none']);

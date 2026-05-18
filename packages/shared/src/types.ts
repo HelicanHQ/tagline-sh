@@ -14,7 +14,9 @@ export type CommitType =
     | 'ci'
     | 'chore'
     | 'revert'
-    | 'breaking';
+    | 'breaking'
+    | 'hotfix'
+    | 'release';
 
 export type BumpType = 'major' | 'minor' | 'patch' | 'none';
 
