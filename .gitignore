@@ -9,3 +9,5 @@ coverage/
 .idea/
 .vscode/
 *.tsbuildinfo
+
+private-key.pem
