@@ -51,7 +51,7 @@ export async function executeRelease(
 
         if (plan.isDryRun) {
             core.info('Dry run: skipping git/GitHub writes.');
-            await postCompletionComment(plan, deps.octokit, {
+            await tryPostCompletion(plan, deps.octokit, {
                 releaseUrl: null,
                 prUrl: null,
                 dryRun: true,
@@ -82,7 +82,7 @@ export async function executeRelease(
         core.info(`  ${prUrl}`);
 
         core.info(`Step 6/8: Posting completion comment`);
-        await postCompletionComment(plan, deps.octokit, {
+        await tryPostCompletion(plan, deps.octokit, {
             releaseUrl,
             prUrl,
             dryRun: false,
@@ -105,18 +105,12 @@ export async function executeRelease(
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         core.error(`Release failed: ${message}`);
-        try {
-            await postCompletionComment(plan, deps.octokit, {
-                releaseUrl,
-                prUrl,
-                dryRun: plan.isDryRun,
-                error: message,
-            });
-        } catch (commentErr) {
-            core.warning(
-                `Could not post failure comment: ${commentErr instanceof Error ? commentErr.message : String(commentErr)}`,
-            );
-        }
+        await tryPostCompletion(plan, deps.octokit, {
+            releaseUrl,
+            prUrl,
+            dryRun: plan.isDryRun,
+            error: message,
+        });
         return {
             success: false,
             nextVersion: plan.nextVersion,
@@ -126,5 +120,27 @@ export async function executeRelease(
             error: message,
             isDryRun: plan.isDryRun,
         };
+    }
+}
+
+/**
+ * Wrap `postCompletionComment` so a failure here (missing `issues: write`
+ * permission, transient API hiccup) doesn't tank an otherwise-successful
+ * release. Logs a warning and returns. The release-result decision is made
+ * upstream based on whether the actual release steps succeeded.
+ */
+async function tryPostCompletion(
+    plan: Parameters<typeof postCompletionComment>[0],
+    octokit: Parameters<typeof postCompletionComment>[1],
+    ctx: Parameters<typeof postCompletionComment>[2],
+): Promise<void> {
+    try {
+        await postCompletionComment(plan, octokit, ctx);
+    } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        core.warning(
+            `Could not post completion comment (release itself was not affected): ${message}. ` +
+                'If you see "Resource not accessible by integration", add `issues: write` to your workflow permissions.',
+        );
     }
 }

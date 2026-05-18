@@ -179,6 +179,7 @@ export function missingWorkflowComment(): string {
         '    permissions:',
         '      contents: write',
         '      pull-requests: write',
+        '      issues: write',
         '    steps:',
         '      - uses: actions/checkout@v4',
         '        with: { fetch-depth: 0 }',
