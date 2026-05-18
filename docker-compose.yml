@@ -1,0 +1,18 @@
+services:
+    bot:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        ports:
+            - '3000:3000'
+        environment:
+            APP_ID: ${APP_ID}
+            PRIVATE_KEY: ${PRIVATE_KEY}
+            WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+            AI_API_KEY: ${AI_API_KEY}
+            AI_BASE_URL: ${AI_BASE_URL:-https://openrouter.ai/api/v1}
+            AI_MODEL: ${AI_MODEL:-openai/gpt-4o-mini}
+            PORT: '3000'
+            LOG_LEVEL: ${LOG_LEVEL:-info}
+            NODE_ENV: production
+        restart: unless-stopped

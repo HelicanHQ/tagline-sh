@@ -1,0 +1,36 @@
+name: 'Tagline Release Action'
+description: 'Executes a release plan prepared by the Tagline bot — bumps versions, writes CHANGELOG.md, tags, releases, opens PR.'
+author: 'tagline-sh'
+branding:
+    icon: 'package'
+    color: 'blue'
+
+inputs:
+    release_plan:
+        description: 'JSON-encoded ReleasePlan object (provided by the Tagline bot)'
+        required: true
+    github_token:
+        description: 'GitHub token with contents and pull-requests write permissions'
+        required: true
+    issue_number:
+        description: 'Issue number to post the completion comment on (empty to skip)'
+        required: false
+        default: ''
+    dry_run:
+        description: 'If true, simulate all steps without making changes'
+        required: false
+        default: 'false'
+
+outputs:
+    version:
+        description: 'The new version that was released'
+    tag:
+        description: 'The git tag that was created'
+    release_url:
+        description: 'URL of the created GitHub release'
+    pr_url:
+        description: 'URL of the opened changelog PR'
+
+runs:
+    using: 'node20'
+    main: 'dist/index.js'

@@ -1,18 +1,24 @@
 {
-  "name": "@tagline-sh/action",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "main": "./dist/index.js",
-  "scripts": {
-    "build": "tsup",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests",
-    "test:watch": "vitest",
-    "clean": "rm -rf dist"
-  },
-  "dependencies": {
-    "@tagline-sh/shared": "workspace:*"
-  },
-  "devDependencies": {}
+    "name": "@tagline-sh/action",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "main": "./dist/index.js",
+    "scripts": {
+        "build": "tsup",
+        "typecheck": "tsc --noEmit",
+        "test": "vitest run --passWithNoTests",
+        "test:watch": "vitest",
+        "clean": "rm -rf dist"
+    },
+    "dependencies": {
+        "@actions/core": "^1.11.1",
+        "@actions/github": "^6.0.0",
+        "@tagline-sh/shared": "workspace:*",
+        "semver": "^7.6.3",
+        "simple-git": "^3.27.0"
+    },
+    "devDependencies": {
+        "@types/semver": "^7.5.8"
+    }
 }

@@ -9,6 +9,14 @@ import type {
 } from './github-reader.js';
 
 /**
+ * Minimal Octokit shape this reader needs. Defined as a `Pick` so we accept
+ * any Octokit-flavored object — both the bare `octokit` package's Octokit and
+ * Probot's `context.octokit` satisfy this (they differ on `.hook` and
+ * retry-shim intersection types we never touch).
+ */
+export type ReaderOctokit = Pick<Octokit, 'rest' | 'paginate'>;
+
+/**
  * `GitHubReader` implementation backed by an authenticated Octokit instance.
  *
  * Phase 4 will inject Probot's `context.octokit` here. For Phase 3 standalone
@@ -22,7 +30,7 @@ import type {
  *     separately from REST — 30 req/min for authenticated apps).
  */
 export class OctokitGitHubReader implements GitHubReader {
-    constructor(private readonly octokit: Octokit) {}
+    constructor(private readonly octokit: ReaderOctokit) {}
 
     async getFileContent(repo: RepoRef, path: string, ref?: string): Promise<string | null> {
         try {

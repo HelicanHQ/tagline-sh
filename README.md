@@ -1,38 +1,111 @@
 # Tagline
 
-GitHub-native release-management agent. Reads merged PRs since the last tag, classifies them by conventional commit type, suggests a version bump with reasoning, and — once approved with a slash command — executes the release: bumps versions, writes `CHANGELOG.md`, creates the git tag, publishes the GitHub release, and opens a PR with the changes.
+> GitHub-native release-management agent. Automates the **thinking step** of releasing, not just the mechanics.
 
-**Status:** pre-MVP. See [`PLAN.md`](./PLAN.md) for the full spec.
+Most release tools (semantic-release, changesets) automate what happens *after* you decide to release. Tagline closes the gap before that decision: it reads merged PRs since your last tag, understands conventional commits, generates a human-readable report with an AI-reasoned version bump suggestion, and — once you `/approve` — runs the release end-to-end.
 
-## Architecture
+You stay in control. The bot only suggests; the action only runs on your explicit approval.
 
-Two components communicating via `workflow_dispatch`:
+## How it works
 
-- **`apps/bot`** — stateless Probot GitHub App. Reads state from GitHub on demand, parses commits, calls an OpenAI-compatible LLM, posts comments. Never writes to user repos.
-- **`apps/action`** — Node 20 GitHub Action triggered by the bot. Runs in the user's CI environment with their secrets and performs all writes.
-- **`packages/shared`** — TypeScript types, constants, and zod schemas shared by both apps.
+```
+Lead comments /release-report
+              ↓
+       Bot reads PRs since last tag, parses commits, calls AI
+              ↓
+       Bot posts formatted report with suggested bump + reasoning
+              ↓
+Lead comments /approve minor
+              ↓
+       Bot triggers workflow_dispatch with the release plan
+              ↓
+       Action bumps version, writes CHANGELOG.md, tags, releases,
+       opens PR — runs in your CI with your secrets
+              ↓
+       Action posts completion comment with links
+```
+
+The bot **never writes** to your repo. Only the action does, and only inside your own CI with your own `GITHUB_TOKEN`. Your branch protections and audit log stay intact.
+
+## Five-minute install
+
+1. Install the [Tagline GitHub App](https://github.com/apps/tagline-sh) on a repo. (Or [self-host](./docs/self-hosting.md).)
+2. Copy [`examples/single-repo/.github/workflows/release-agent.yml`](./examples/single-repo/.github/workflows/release-agent.yml) into your repo. (Monorepo? Use [`examples/monorepo/...`](./examples/monorepo/.github/workflows/release-agent.yml) — same file.)
+3. Add an `AI_API_KEY` repo secret. Any OpenAI-compatible provider: OpenAI, OpenRouter, Groq, Ollama, Anthropic via proxy.
+4. Comment `/release-report` on any issue.
+5. Review, then comment `/approve` to ship.
+
+Full walkthrough: [Getting started](./docs/getting-started.md).
 
 ## Slash commands
 
 ```
-/release-report           # generate a release report
-/approve                  # release with the suggested bump
-/approve patch|minor|major
+/release-report
+/release-report --branch staging
+
+/approve
+/approve patch | minor | major
 /approve --draft
 /approve --dry-run
+/approve minor --draft
 ```
+
+See [slash-commands.md](./docs/slash-commands.md) for behavior, error cases, and the comment lifecycle.
+
+## Highlights
+
+- **GitHub-native UX.** Everything happens in PR/issue comments. No dashboard, no separate login.
+- **AI is an enhancement, never a dependency.** Calls fail open: reports still generate deterministically from commits, with the reasoning replaced by `"AI unavailable — manual review required"`.
+- **Stateless by design.** GitHub is the state store. Git tags = last release. `.release-agent.md` = config. No database to operate.
+- **Monorepo-aware.** Auto-detects pnpm-workspaces, Turborepo, Nx, Lerna, npm/yarn workspaces. Each affected package versioned independently.
+- **BYOK.** OpenAI-compatible API. Override `AI_BASE_URL` and `AI_MODEL` for any provider; default is OpenRouter + `gpt-4o-mini` for cost.
+- **MIT licensed.** CLI and Action are free forever. Hosted GitHub App is free for OSS; paid for private repos (post-MVP).
+
+## Architecture
+
+Two-component split — the bot thinks, the action writes.
+
+| Package | What it is |
+|---------|------------|
+| `apps/bot` | Probot GitHub App. Stateless. Reads from GitHub on demand. Posts comments. Never writes to user repos. |
+| `apps/action` | Node 20 GitHub Action. Triggered via `workflow_dispatch`. Bumps versions, writes `CHANGELOG.md`, tags, releases, opens PR. |
+| `packages/shared` | TypeScript types + zod schemas. The `ReleasePlan` contract between bot and action. |
+
+The action runs **in the user's CI**, with the user's secrets and audit log. The bot only proposes; the action only acts on explicit `/approve`.
+
+Full architectural detail: [`PLAN.md`](./PLAN.md).
 
 ## Local development
 
 ```bash
 pnpm install
 pnpm typecheck
+pnpm lint
 pnpm test
 pnpm build
 ```
 
-See `apps/bot/README.md` (coming in Phase 4) for the smee.io webhook proxy setup.
+Bot dev requires a personal GitHub App + smee.io webhook proxy — see [`apps/bot/README.md`](./apps/bot/README.md).
+
+## Documentation
+
+- [Getting started](./docs/getting-started.md)
+- [Slash commands](./docs/slash-commands.md)
+- [Configuration (`.release-agent.md`)](./docs/configuration.md)
+- [Monorepo behavior](./docs/monorepo.md)
+- [Self-hosting](./docs/self-hosting.md)
+
+## Roadmap
+
+This repo ships the MVP. Post-validation roadmap (from `PLAN.md §24`):
+
+- JIRA / Linear API enrichment of ticket refs
+- Slack / Teams / Discord release notifications
+- Web dashboard for release history + per-repo settings
+- GitLab / Bitbucket support
+- Independent versioning per monorepo package
+- Rollback monitoring + post-release health checks
 
 ## License
 
-MIT — see [LICENSE](./LICENSE).
+MIT — see [LICENSE](./LICENSE). Self-hosting is a feature, not a threat.

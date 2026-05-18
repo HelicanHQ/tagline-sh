@@ -1,0 +1,33 @@
+# Tagline Configuration
+
+# This file is optional. Tagline works out of the box with sensible defaults
+# for repos that follow conventional commits.
+#
+# The two sections below are parsed deterministically (look for `## Branches`
+# and `## Pre-release Tags`). Anything else in this file is passed to the AI
+# as free-form context — write whatever a teammate would need to know about
+# how your team releases.
+
+## Branches
+
+- production: main
+- staging: staging
+- development: develop
+
+## Pre-release Tags
+
+- staging suffix: rc
+- development suffix: alpha
+
+## Release Notes Style
+
+Write release notes for a technical audience. Be concise.
+Group changes under: New Features, Bug Fixes, Maintenance.
+Highlight any security-related fixes prominently.
+When a ticket number is present, include it in brackets after the item.
+
+## Scope Notes
+
+This is a Node.js API service. Changes to `src/` affect the public API.
+Changes under `infra/` are infrastructure-only and should be noted as such.
+The `packages/ui` package has its own release cycle — exclude from API releases.
