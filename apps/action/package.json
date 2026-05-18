@@ -1,0 +1,18 @@
+{
+  "name": "@tagline-sh/action",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@tagline-sh/shared": "workspace:*"
+  },
+  "devDependencies": {}
+}

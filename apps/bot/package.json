@@ -1,0 +1,31 @@
+{
+    "name": "@tagline-sh/bot",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "main": "./dist/index.js",
+    "scripts": {
+        "build": "tsup",
+        "dev": "tsup --watch --onSuccess \"node dist/index.js\"",
+        "start": "node dist/index.js",
+        "typecheck": "tsc --noEmit",
+        "test": "vitest run --passWithNoTests",
+        "test:watch": "vitest",
+        "clean": "rm -rf dist"
+    },
+    "dependencies": {
+        "@tagline-sh/shared": "workspace:*",
+        "openai": "^4.71.0",
+        "picomatch": "^4.0.2",
+        "pino": "^9.5.0",
+        "remark-parse": "^11.0.0",
+        "semver": "^7.6.3",
+        "unified": "^11.0.5",
+        "unist-util-visit": "^5.0.0",
+        "yaml": "^2.6.0"
+    },
+    "devDependencies": {
+        "@types/picomatch": "^3.0.1",
+        "@types/semver": "^7.5.8"
+    }
+}
