@@ -7,7 +7,6 @@ services:
             - '3000:3000'
         environment:
             APP_ID: ${APP_ID}
-            PRIVATE_KEY: ${PRIVATE_KEY}
             WEBHOOK_SECRET: ${WEBHOOK_SECRET}
             AI_API_KEY: ${AI_API_KEY}
             AI_BASE_URL: ${AI_BASE_URL:-https://openrouter.ai/api/v1}
@@ -15,4 +14,15 @@ services:
             PORT: '3000'
             LOG_LEVEL: ${LOG_LEVEL:-info}
             NODE_ENV: production
+            # Tell Probot where to find the PEM inside the container.
+            PRIVATE_KEY_PATH: /run/secrets/tagline_private_key
+        secrets:
+            - tagline_private_key
         restart: unless-stopped
+
+# Docker Compose secrets — the PEM is mounted at /run/secrets/tagline_private_key
+# inside the container, owned by the container user, mode 0444. It never appears
+# in `docker inspect`, `ps`, or process environment.
+secrets:
+    tagline_private_key:
+        file: ./private-key.pem
