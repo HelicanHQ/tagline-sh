@@ -10,7 +10,7 @@
 // Phase 3 will introduce a real-GitHub variant of this script that swaps the
 // FakeGitHubReader for a live Octokit-backed implementation.
 
-import { DEFAULT_CONFIG, type ReleaseReport } from '@tagline-sh/shared';
+import type { ReleaseReport } from '@tagline-sh/shared';
 import { attributePRsToPackages, detectMonorepo } from '../src/services/monorepo-detector.js';
 import { readRepoConfig } from '../src/services/config-reader.js';
 import { aggregatePRBumps, parsePR } from '../src/services/commit-parser.js';

@@ -9,3 +9,5 @@ export * from './monorepo-detector.js';
 export * from './config-reader.js';
 export * from './changelog-writer.js';
 export * from './report-generator.js';
+export * from './pr-reader.js';
+export * from './octokit-reader.js';
