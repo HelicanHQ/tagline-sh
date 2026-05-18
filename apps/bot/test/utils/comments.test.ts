@@ -86,6 +86,7 @@ const sampleReport: ReleaseReport = {
         '## [1.5.0] - 2026-05-18\n\n### Added\n\n- OAuth2 PKCE ([#342](url))\n\n### Fixed\n\n- Token refresh race ([#341](url))\n',
     isMonorepo: false,
     monorepoInfo: null,
+    versioningScheme: 'semver',
     generatedAt: '2026-05-18T12:00:00Z',
 };
 
@@ -142,6 +143,25 @@ describe('reportComment', () => {
         const md = reportComment(firstRelease);
         expect(md).toContain('_first release_');
         expect(md).toContain('`v0.1.0`');
+    });
+
+    it('renders calver recommendation without bump wording', () => {
+        const calverReport: ReleaseReport = {
+            ...sampleReport,
+            versioningScheme: 'calver',
+            suggestedVersion: '2026.05.1',
+            suggestedBump: 'minor', // advisory only — should not appear in the comment.
+        };
+        const md = reportComment(calverReport);
+        expect(md).toContain('**Next version:** `v2026.05.1`');
+        expect(md).toContain('_(scheme: calver)_');
+        expect(md).not.toContain('Suggested bump:');
+        // Footer should advertise `as <version>`, not bump words.
+        expect(md).toContain('/approve as <version>');
+        expect(md).not.toContain('/approve patch');
+        // Features section drops the "suggests X bump" suffix.
+        expect(md).toContain('### ✨ New features\n');
+        expect(md).not.toContain('suggests `minor` bump');
     });
 });
 

@@ -76,6 +76,13 @@ export const MonorepoInfoSchema = z.object({
     rootPackage: PackageInfoSchema.nullable(),
 });
 
+export const VersioningSchemeSchema = z.enum(['semver', 'calver', 'incremental']);
+
+export const VersioningConfigSchema = z.object({
+    scheme: VersioningSchemeSchema,
+    pattern: z.string().nullable(),
+});
+
 export const RepoConfigSchema = z.object({
     branches: z.object({
         production: z.string(),
@@ -86,6 +93,7 @@ export const RepoConfigSchema = z.object({
         staging: z.string(),
         development: z.string(),
     }),
+    versioning: VersioningConfigSchema,
     releaseNotesStyle: z.string(),
     customContext: z.string(),
     rawContent: z.string(),

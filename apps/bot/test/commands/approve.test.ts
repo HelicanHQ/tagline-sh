@@ -10,6 +10,7 @@ describe('parseApproveCommand', () => {
     it('parses bare /approve', () => {
         expect(parseApproveCommand('')).toEqual({
             bumpOverride: null,
+            versionOverride: null,
             isDraft: false,
             isDryRun: false,
             branchOverride: null,
@@ -19,6 +20,7 @@ describe('parseApproveCommand', () => {
     it.each(['patch', 'minor', 'major'])('parses /approve %s', (bump) => {
         const r = parseApproveCommand(bump);
         expect(r?.bumpOverride).toBe(bump);
+        expect(r?.versionOverride).toBeNull();
     });
 
     it('parses --draft and --dry-run flags in any order', () => {
@@ -27,6 +29,7 @@ describe('parseApproveCommand', () => {
         const both = parseApproveCommand('major --draft --dry-run');
         expect(both).toEqual({
             bumpOverride: 'major',
+            versionOverride: null,
             isDraft: true,
             isDryRun: true,
             branchOverride: null,
@@ -35,6 +38,31 @@ describe('parseApproveCommand', () => {
 
     it('parses --branch <name>', () => {
         expect(parseApproveCommand('--branch staging')?.branchOverride).toBe('staging');
+    });
+
+    it('parses `as <version>` override', () => {
+        expect(parseApproveCommand('as 2026.6.0')).toEqual({
+            bumpOverride: null,
+            versionOverride: '2026.6.0',
+            isDraft: false,
+            isDryRun: false,
+            branchOverride: null,
+        });
+    });
+
+    it('combines `as <version>` with flags', () => {
+        const r = parseApproveCommand('as 2026.6.0 --draft --dry-run');
+        expect(r?.versionOverride).toBe('2026.6.0');
+        expect(r?.isDraft).toBe(true);
+        expect(r?.isDryRun).toBe(true);
+    });
+
+    it('rejects `as` with no argument', () => {
+        expect(parseApproveCommand('as')).toBeNull();
+    });
+
+    it('rejects bump + `as` mixed', () => {
+        expect(parseApproveCommand('minor as 2026.6.0')).toBeNull();
     });
 
     it('rejects multiple bump tokens', () => {

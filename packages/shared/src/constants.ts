@@ -1,4 +1,4 @@
-import type { BumpType, RepoConfig } from './types.js';
+import type { BumpType, RepoConfig, VersioningConfig } from './types.js';
 
 // --- Branding -----------------------------------------------------------------
 
@@ -49,6 +49,17 @@ export const BUMP_PRIORITY: Record<BumpType, number> = {
 
 // --- Defaults ----------------------------------------------------------------
 
+/**
+ * Default calver pattern when the user opts into calver without specifying a
+ * pattern. `YYYY.0M.MICRO` matches the most common npm CalVer convention.
+ */
+export const DEFAULT_CALVER_PATTERN = 'YYYY.0M.MICRO';
+
+export const DEFAULT_VERSIONING: VersioningConfig = {
+    scheme: 'semver',
+    pattern: null,
+};
+
 export const DEFAULT_CONFIG: RepoConfig = {
     branches: {
         production: 'main',
@@ -59,6 +70,7 @@ export const DEFAULT_CONFIG: RepoConfig = {
         staging: 'rc',
         development: 'alpha',
     },
+    versioning: DEFAULT_VERSIONING,
     releaseNotesStyle: '',
     customContext: '',
     rawContent: '',

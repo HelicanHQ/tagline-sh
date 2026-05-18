@@ -1,4 +1,9 @@
-import type { BumpType, ReleasePlan, RepoConfig } from '@tagline-sh/shared';
+import type {
+    BumpType,
+    ReleasePlan,
+    RepoConfig,
+    VersioningScheme,
+} from '@tagline-sh/shared';
 import { RELEASE_WORKFLOW_FILE } from '@tagline-sh/shared';
 import {
     calculateNextVersion,
@@ -11,6 +16,8 @@ import { buildReleaseReport } from './release-report.js';
 
 export interface ApproveCommand {
     bumpOverride: BumpType | null;
+    /** Explicit version string from `/approve as X.Y.Z`. Mutually exclusive with bumpOverride. */
+    versionOverride: string | null;
     isDraft: boolean;
     isDryRun: boolean;
     branchOverride: string | null;
@@ -19,21 +26,26 @@ export interface ApproveCommand {
 const VALID_BUMPS: ReadonlySet<BumpType> = new Set(['major', 'minor', 'patch']);
 
 /**
- * Parse the `/approve` command line per PLAN.md §9.
+ * Parse the `/approve` command line per PLAN.md §9, extended for calver /
+ * incremental schemes.
  *
  * Examples:
- *   /approve                  → { bumpOverride: null, ... }
- *   /approve minor            → { bumpOverride: 'minor', ... }
- *   /approve --draft          → { isDraft: true }
- *   /approve major --dry-run  → { bumpOverride: 'major', isDryRun: true }
+ *   /approve                       → { bumpOverride: null, ... }
+ *   /approve minor                 → { bumpOverride: 'minor', ... }   (semver only)
+ *   /approve as 2026.6.0           → { versionOverride: '2026.6.0', ... }
+ *   /approve --draft               → { isDraft: true }
+ *   /approve major --dry-run       → { bumpOverride: 'major', isDryRun: true }
+ *   /approve as 2026.6.0 --draft   → version override + draft flag
  *
- * Returns `null` for an unparseable command (e.g. `/approve foo`). Callers
- * should treat that as a user error and surface a usage message.
+ * Returns `null` for an unparseable command (e.g. `/approve foo`, or
+ * `bumpOverride + versionOverride` together). Callers should treat that as a
+ * user error and surface a usage message.
  */
 export function parseApproveCommand(args: string): ApproveCommand | null {
     const tokens = args.trim().split(/\s+/).filter(Boolean);
 
     let bumpOverride: BumpType | null = null;
+    let versionOverride: string | null = null;
     let isDraft = false;
     let isDryRun = false;
     let branchOverride: string | null = null;
@@ -55,6 +67,14 @@ export function parseApproveCommand(args: string): ApproveCommand | null {
             i += 1;
             continue;
         }
+        if (t === 'as') {
+            const next = tokens[i + 1];
+            if (!next) return null;
+            if (versionOverride) return null;
+            versionOverride = next;
+            i += 1;
+            continue;
+        }
         if (VALID_BUMPS.has(t as BumpType)) {
             if (bumpOverride) return null; // multiple bumps specified
             bumpOverride = t as BumpType;
@@ -65,7 +85,9 @@ export function parseApproveCommand(args: string): ApproveCommand | null {
         return null;
     }
 
-    return { bumpOverride, isDraft, isDryRun, branchOverride };
+    if (bumpOverride && versionOverride) return null;
+
+    return { bumpOverride, versionOverride, isDraft, isDryRun, branchOverride };
 }
 
 export interface BuildApprovePlanInput {
@@ -81,11 +103,10 @@ export interface BuildApprovePlanInput {
     ai?: { apiKey: string; baseUrl?: string; model?: string };
 }
 
-export interface BuildApprovePlanResult {
-    plan: ReleasePlan;
-    /** True if no PRs found — caller should bail with "no changes" message. */
-    empty: boolean;
-}
+export type BuildApprovePlanResult =
+    | { ok: true; plan: ReleasePlan; empty: boolean }
+    /** User-visible validation error (e.g. bump words on a calver repo). */
+    | { ok: false; error: string };
 
 /**
  * Build the final `ReleasePlan` to send to the action.
@@ -94,6 +115,10 @@ export interface BuildApprovePlanResult {
  * version (PRs → Keep-a-Changelog), NOT the AI-generated preview. This keeps
  * the on-disk artifact reproducible and verifiable; the AI is only used for
  * the report-comment reasoning that humans review pre-approval.
+ *
+ * Validation lives here (rather than in `parseApproveCommand`) because it
+ * depends on the repo's `.release-agent.md` — for example, `/approve minor`
+ * is valid only when `versioning.scheme === 'semver'`.
  */
 export async function buildApprovePlan(
     input: BuildApprovePlanInput,
@@ -106,32 +131,40 @@ export async function buildApprovePlan(
     if (input.command.branchOverride) reportInput.branch = input.command.branchOverride;
     if (input.ai) reportInput.ai = input.ai;
 
+    const config = await readConfigForCalc(input);
+    const scheme = config.versioning.scheme;
+
+    if (scheme !== 'semver' && input.command.bumpOverride) {
+        return {
+            ok: false,
+            error:
+                `Bump words like \`${input.command.bumpOverride}\` only apply when ` +
+                '`versioning.scheme` is `semver`. This repo is configured for ' +
+                `\`${scheme}\`. Use \`/approve\` (auto-computed) or \`/approve as <version>\` to override.`,
+        };
+    }
+
     const { report } = await buildReleaseReport(reportInput);
 
     if (report.prs.length === 0) {
         return {
+            ok: true,
             plan: emptyPlan(input, report.baseBranch, report.currentVersion),
             empty: true,
         };
     }
 
     const finalBump: BumpType = input.command.bumpOverride ?? report.suggestedBump;
-    const finalVersion =
-        finalBump === 'none'
-            ? report.currentVersion
-            : calculateNextVersion(
-                  report.currentVersion,
-                  finalBump,
-                  report.baseBranch,
-                  await readConfigForCalc(input, report.baseBranch),
-              );
+    const finalVersion = input.command.versionOverride
+        ? input.command.versionOverride
+        : computeFinalVersion(scheme, finalBump, report, config);
 
     // Always regenerate the on-disk changelog deterministically.
     const det = deterministicReport({
         prs: report.prs,
         suggestedBump: finalBump,
         suggestedVersion: finalVersion,
-        config: await readConfigForCalc(input, report.baseBranch),
+        config,
     });
 
     const plan: ReleasePlan = {
@@ -153,7 +186,24 @@ export async function buildApprovePlan(
         approvedAt: new Date().toISOString(),
     };
 
-    return { plan, empty: false };
+    return { ok: true, plan, empty: false };
+}
+
+/**
+ * Resolve the final version string for the release.
+ *
+ * SemVer's `bump === 'none'` short-circuits to the current version (no change).
+ * CalVer/Incremental always advance — their next version is determined by the
+ * scheme regardless of conventional-commit bumps.
+ */
+function computeFinalVersion(
+    scheme: VersioningScheme,
+    finalBump: BumpType,
+    report: { currentVersion: string; baseBranch: string },
+    config: RepoConfig,
+): string {
+    if (scheme === 'semver' && finalBump === 'none') return report.currentVersion;
+    return calculateNextVersion(report.currentVersion, finalBump, report.baseBranch, config);
 }
 
 function emptyPlan(
@@ -183,10 +233,7 @@ function emptyPlan(
 
 // Local helper that re-fetches the config. Caching is left to the caller's
 // Octokit transport layer; the bot is intentionally stateless.
-async function readConfigForCalc(
-    input: BuildApprovePlanInput,
-    _branch: string,
-): Promise<RepoConfig> {
+async function readConfigForCalc(input: BuildApprovePlanInput): Promise<RepoConfig> {
     const reader = new OctokitGitHubReader(input.octokit);
     return readRepoConfig(reader, { owner: input.owner, repo: input.repo });
 }

@@ -29,6 +29,24 @@ export type MonorepoType =
     | 'lerna'
     | 'none';
 
+/**
+ * Versioning scheme selected by the user in `.release-agent.md`. Default is
+ * `semver`. `calver` requires `VersioningConfig.pattern`; `incremental` ignores
+ * it. SemVer math is the only scheme that interprets `BumpType` literally —
+ * CalVer is time-driven and incremental is monotonic.
+ */
+export type VersioningScheme = 'semver' | 'calver' | 'incremental';
+
+export interface VersioningConfig {
+    scheme: VersioningScheme;
+    /**
+     * Calver pattern template. Tokens: `YYYY`, `YY`, `0Y`, `MM`, `0M`, `DD`,
+     * `0D`, `MICRO`. Anything else is treated as a literal separator. Must
+     * include `MICRO` for calver schemes. Ignored for semver / incremental.
+     */
+    pattern: string | null;
+}
+
 export interface ParsedCommit {
     type: CommitType;
     scope: string | null;
@@ -75,6 +93,7 @@ export interface RepoConfig {
         staging: string;
         development: string;
     };
+    versioning: VersioningConfig;
     releaseNotesStyle: string;
     customContext: string;
     rawContent: string;
@@ -90,6 +109,8 @@ export interface ReleaseReport {
     suggestedBump: BumpType;
     suggestedVersion: string;
     currentVersion: string;
+    /** The versioning scheme active for this repo. Drives the recommendation rendering. */
+    versioningScheme: VersioningScheme;
     reasoning: string;
     changelogPreview: string;
     isMonorepo: boolean;

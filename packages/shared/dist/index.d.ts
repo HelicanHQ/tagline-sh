@@ -1,8 +1,24 @@
 import { z } from 'zod';
 
-type CommitType = 'feat' | 'fix' | 'docs' | 'style' | 'refactor' | 'perf' | 'test' | 'build' | 'ci' | 'chore' | 'revert' | 'breaking';
+type CommitType = 'feat' | 'fix' | 'docs' | 'style' | 'refactor' | 'perf' | 'test' | 'build' | 'ci' | 'chore' | 'revert' | 'breaking' | 'hotfix' | 'release';
 type BumpType = 'major' | 'minor' | 'patch' | 'none';
 type MonorepoType = 'pnpm-workspaces' | 'npm-workspaces' | 'yarn-workspaces' | 'turborepo' | 'nx' | 'lerna' | 'none';
+/**
+ * Versioning scheme selected by the user in `.release-agent.md`. Default is
+ * `semver`. `calver` requires `VersioningConfig.pattern`; `incremental` ignores
+ * it. SemVer math is the only scheme that interprets `BumpType` literally —
+ * CalVer is time-driven and incremental is monotonic.
+ */
+type VersioningScheme = 'semver' | 'calver' | 'incremental';
+interface VersioningConfig {
+    scheme: VersioningScheme;
+    /**
+     * Calver pattern template. Tokens: `YYYY`, `YY`, `0Y`, `MM`, `0M`, `DD`,
+     * `0D`, `MICRO`. Anything else is treated as a literal separator. Must
+     * include `MICRO` for calver schemes. Ignored for semver / incremental.
+     */
+    pattern: string | null;
+}
 interface ParsedCommit {
     type: CommitType;
     scope: string | null;
@@ -45,6 +61,7 @@ interface RepoConfig {
         staging: string;
         development: string;
     };
+    versioning: VersioningConfig;
     releaseNotesStyle: string;
     customContext: string;
     rawContent: string;
@@ -59,6 +76,8 @@ interface ReleaseReport {
     suggestedBump: BumpType;
     suggestedVersion: string;
     currentVersion: string;
+    /** The versioning scheme active for this repo. Drives the recommendation rendering. */
+    versioningScheme: VersioningScheme;
     reasoning: string;
     changelogPreview: string;
     isMonorepo: boolean;
@@ -114,6 +133,12 @@ declare const COMMIT_TYPE_BUMP: Record<string, BumpType>;
  * Higher value = bigger release.
  */
 declare const BUMP_PRIORITY: Record<BumpType, number>;
+/**
+ * Default calver pattern when the user opts into calver without specifying a
+ * pattern. `YYYY.0M.MICRO` matches the most common npm CalVer convention.
+ */
+declare const DEFAULT_CALVER_PATTERN = "YYYY.0M.MICRO";
+declare const DEFAULT_VERSIONING: VersioningConfig;
 declare const DEFAULT_CONFIG: RepoConfig;
 /** AI configuration defaults. Users override via env vars at the bot host. */
 declare const AI_DEFAULTS: {
@@ -149,25 +174,25 @@ declare function aggregateBumps(bumps: readonly BumpType[]): BumpType;
 /** Truncate a PR body to the first N chars (default 500) preserving word boundaries. */
 declare function excerpt(text: string | null | undefined, maxLen?: number): string | null;
 
-declare const CommitTypeSchema: z.ZodEnum<["feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert", "breaking"]>;
+declare const CommitTypeSchema: z.ZodEnum<["feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert", "breaking", "hotfix", "release"]>;
 declare const BumpTypeSchema: z.ZodEnum<["major", "minor", "patch", "none"]>;
 declare const MonorepoTypeSchema: z.ZodEnum<["pnpm-workspaces", "npm-workspaces", "yarn-workspaces", "turborepo", "nx", "lerna", "none"]>;
 declare const ParsedCommitSchema: z.ZodObject<{
-    type: z.ZodEnum<["feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert", "breaking"]>;
+    type: z.ZodEnum<["feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert", "breaking", "hotfix", "release"]>;
     scope: z.ZodNullable<z.ZodString>;
     subject: z.ZodString;
     body: z.ZodNullable<z.ZodString>;
     isBreaking: z.ZodBoolean;
     sha: z.ZodString;
 }, "strip", z.ZodTypeAny, {
-    type: "feat" | "fix" | "docs" | "style" | "refactor" | "perf" | "test" | "build" | "ci" | "chore" | "revert" | "breaking";
+    type: "feat" | "fix" | "docs" | "style" | "refactor" | "perf" | "test" | "build" | "ci" | "chore" | "revert" | "breaking" | "hotfix" | "release";
     scope: string | null;
     subject: string;
     body: string | null;
     isBreaking: boolean;
     sha: string;
 }, {
-    type: "feat" | "fix" | "docs" | "style" | "refactor" | "perf" | "test" | "build" | "ci" | "chore" | "revert" | "breaking";
+    type: "feat" | "fix" | "docs" | "style" | "refactor" | "perf" | "test" | "build" | "ci" | "chore" | "revert" | "breaking" | "hotfix" | "release";
     scope: string | null;
     subject: string;
     body: string | null;
@@ -181,21 +206,21 @@ declare const ParsedPRSchema: z.ZodObject<{
     author: z.ZodString;
     mergedAt: z.ZodString;
     commits: z.ZodArray<z.ZodObject<{
-        type: z.ZodEnum<["feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert", "breaking"]>;
+        type: z.ZodEnum<["feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert", "breaking", "hotfix", "release"]>;
         scope: z.ZodNullable<z.ZodString>;
         subject: z.ZodString;
         body: z.ZodNullable<z.ZodString>;
         isBreaking: z.ZodBoolean;
         sha: z.ZodString;
     }, "strip", z.ZodTypeAny, {
-        type: "feat" | "fix" | "docs" | "style" | "refactor" | "perf" | "test" | "build" | "ci" | "chore" | "revert" | "breaking";
+        type: "feat" | "fix" | "docs" | "style" | "refactor" | "perf" | "test" | "build" | "ci" | "chore" | "revert" | "breaking" | "hotfix" | "release";
         scope: string | null;
         subject: string;
         body: string | null;
         isBreaking: boolean;
         sha: string;
     }, {
-        type: "feat" | "fix" | "docs" | "style" | "refactor" | "perf" | "test" | "build" | "ci" | "chore" | "revert" | "breaking";
+        type: "feat" | "fix" | "docs" | "style" | "refactor" | "perf" | "test" | "build" | "ci" | "chore" | "revert" | "breaking" | "hotfix" | "release";
         scope: string | null;
         subject: string;
         body: string | null;
@@ -212,7 +237,7 @@ declare const ParsedPRSchema: z.ZodObject<{
     author: string;
     mergedAt: string;
     commits: {
-        type: "feat" | "fix" | "docs" | "style" | "refactor" | "perf" | "test" | "build" | "ci" | "chore" | "revert" | "breaking";
+        type: "feat" | "fix" | "docs" | "style" | "refactor" | "perf" | "test" | "build" | "ci" | "chore" | "revert" | "breaking" | "hotfix" | "release";
         scope: string | null;
         subject: string;
         body: string | null;
@@ -229,7 +254,7 @@ declare const ParsedPRSchema: z.ZodObject<{
     author: string;
     mergedAt: string;
     commits: {
-        type: "feat" | "fix" | "docs" | "style" | "refactor" | "perf" | "test" | "build" | "ci" | "chore" | "revert" | "breaking";
+        type: "feat" | "fix" | "docs" | "style" | "refactor" | "perf" | "test" | "build" | "ci" | "chore" | "revert" | "breaking" | "hotfix" | "release";
         scope: string | null;
         subject: string;
         body: string | null;
@@ -317,6 +342,17 @@ declare const MonorepoInfoSchema: z.ZodObject<{
         affectedPRs: Array<z.infer<typeof ParsedPRSchema>>;
     } | null;
 }>;
+declare const VersioningSchemeSchema: z.ZodEnum<["semver", "calver", "incremental"]>;
+declare const VersioningConfigSchema: z.ZodObject<{
+    scheme: z.ZodEnum<["semver", "calver", "incremental"]>;
+    pattern: z.ZodNullable<z.ZodString>;
+}, "strip", z.ZodTypeAny, {
+    scheme: "semver" | "calver" | "incremental";
+    pattern: string | null;
+}, {
+    scheme: "semver" | "calver" | "incremental";
+    pattern: string | null;
+}>;
 declare const RepoConfigSchema: z.ZodObject<{
     branches: z.ZodObject<{
         production: z.ZodString;
@@ -341,6 +377,16 @@ declare const RepoConfigSchema: z.ZodObject<{
         staging: string;
         development: string;
     }>;
+    versioning: z.ZodObject<{
+        scheme: z.ZodEnum<["semver", "calver", "incremental"]>;
+        pattern: z.ZodNullable<z.ZodString>;
+    }, "strip", z.ZodTypeAny, {
+        scheme: "semver" | "calver" | "incremental";
+        pattern: string | null;
+    }, {
+        scheme: "semver" | "calver" | "incremental";
+        pattern: string | null;
+    }>;
     releaseNotesStyle: z.ZodString;
     customContext: z.ZodString;
     rawContent: z.ZodString;
@@ -354,6 +400,10 @@ declare const RepoConfigSchema: z.ZodObject<{
         staging: string;
         development: string;
     };
+    versioning: {
+        scheme: "semver" | "calver" | "incremental";
+        pattern: string | null;
+    };
     releaseNotesStyle: string;
     customContext: string;
     rawContent: string;
@@ -366,6 +416,10 @@ declare const RepoConfigSchema: z.ZodObject<{
     preReleaseSuffix: {
         staging: string;
         development: string;
+    };
+    versioning: {
+        scheme: "semver" | "calver" | "incremental";
+        pattern: string | null;
     };
     releaseNotesStyle: string;
     customContext: string;
@@ -386,21 +440,21 @@ declare const ReleasePlanSchema: z.ZodObject<{
         author: z.ZodString;
         mergedAt: z.ZodString;
         commits: z.ZodArray<z.ZodObject<{
-            type: z.ZodEnum<["feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert", "breaking"]>;
+            type: z.ZodEnum<["feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert", "breaking", "hotfix", "release"]>;
             scope: z.ZodNullable<z.ZodString>;
             subject: z.ZodString;
             body: z.ZodNullable<z.ZodString>;
             isBreaking: z.ZodBoolean;
             sha: z.ZodString;
         }, "strip", z.ZodTypeAny, {
-            type: "feat" | "fix" | "docs" | "style" | "refactor" | "perf" | "test" | "build" | "ci" | "chore" | "revert" | "breaking";
+            type: "feat" | "fix" | "docs" | "style" | "refactor" | "perf" | "test" | "build" | "ci" | "chore" | "revert" | "breaking" | "hotfix" | "release";
             scope: string | null;
             subject: string;
             body: string | null;
             isBreaking: boolean;
             sha: string;
         }, {
-            type: "feat" | "fix" | "docs" | "style" | "refactor" | "perf" | "test" | "build" | "ci" | "chore" | "revert" | "breaking";
+            type: "feat" | "fix" | "docs" | "style" | "refactor" | "perf" | "test" | "build" | "ci" | "chore" | "revert" | "breaking" | "hotfix" | "release";
             scope: string | null;
             subject: string;
             body: string | null;
@@ -417,7 +471,7 @@ declare const ReleasePlanSchema: z.ZodObject<{
         author: string;
         mergedAt: string;
         commits: {
-            type: "feat" | "fix" | "docs" | "style" | "refactor" | "perf" | "test" | "build" | "ci" | "chore" | "revert" | "breaking";
+            type: "feat" | "fix" | "docs" | "style" | "refactor" | "perf" | "test" | "build" | "ci" | "chore" | "revert" | "breaking" | "hotfix" | "release";
             scope: string | null;
             subject: string;
             body: string | null;
@@ -434,7 +488,7 @@ declare const ReleasePlanSchema: z.ZodObject<{
         author: string;
         mergedAt: string;
         commits: {
-            type: "feat" | "fix" | "docs" | "style" | "refactor" | "perf" | "test" | "build" | "ci" | "chore" | "revert" | "breaking";
+            type: "feat" | "fix" | "docs" | "style" | "refactor" | "perf" | "test" | "build" | "ci" | "chore" | "revert" | "breaking" | "hotfix" | "release";
             scope: string | null;
             subject: string;
             body: string | null;
@@ -536,7 +590,7 @@ declare const ReleasePlanSchema: z.ZodObject<{
         author: string;
         mergedAt: string;
         commits: {
-            type: "feat" | "fix" | "docs" | "style" | "refactor" | "perf" | "test" | "build" | "ci" | "chore" | "revert" | "breaking";
+            type: "feat" | "fix" | "docs" | "style" | "refactor" | "perf" | "test" | "build" | "ci" | "chore" | "revert" | "breaking" | "hotfix" | "release";
             scope: string | null;
             subject: string;
             body: string | null;
@@ -588,7 +642,7 @@ declare const ReleasePlanSchema: z.ZodObject<{
         author: string;
         mergedAt: string;
         commits: {
-            type: "feat" | "fix" | "docs" | "style" | "refactor" | "perf" | "test" | "build" | "ci" | "chore" | "revert" | "breaking";
+            type: "feat" | "fix" | "docs" | "style" | "refactor" | "perf" | "test" | "build" | "ci" | "chore" | "revert" | "breaking" | "hotfix" | "release";
             scope: string | null;
             subject: string;
             body: string | null;
@@ -654,4 +708,4 @@ declare const ReleaseResultSchema: z.ZodObject<{
 /** Parse a JSON-encoded ReleasePlan, throwing a typed ZodError on malformed input. */
 declare function parseReleasePlan(json: string): z.infer<typeof ReleasePlanSchema>;
 
-export { AI_DEFAULTS, APP_DISPLAY_NAME, APP_PACKAGE_NAME, BOT_GIT_IDENTITY, BUMP_PRIORITY, type BumpType, BumpTypeSchema, COMMIT_TYPE_BUMP, type CommitType, CommitTypeSchema, DEFAULT_CONFIG, type MonorepoInfo, MonorepoInfoSchema, type MonorepoType, MonorepoTypeSchema, type PackageInfo, PackageInfoSchema, type ParsedCommit, ParsedCommitSchema, type ParsedPR, ParsedPRSchema, RELEASE_WORKFLOW_FILE, type ReleasePlan, ReleasePlanSchema, type ReleaseReport, type ReleaseResult, ReleaseResultSchema, type RepoConfig, RepoConfigSchema, aggregateBumps, excerpt, extractTickets, maxBump, parseReleasePlan, releaseBranchName, releaseTagName };
+export { AI_DEFAULTS, APP_DISPLAY_NAME, APP_PACKAGE_NAME, BOT_GIT_IDENTITY, BUMP_PRIORITY, type BumpType, BumpTypeSchema, COMMIT_TYPE_BUMP, type CommitType, CommitTypeSchema, DEFAULT_CALVER_PATTERN, DEFAULT_CONFIG, DEFAULT_VERSIONING, type MonorepoInfo, MonorepoInfoSchema, type MonorepoType, MonorepoTypeSchema, type PackageInfo, PackageInfoSchema, type ParsedCommit, ParsedCommitSchema, type ParsedPR, ParsedPRSchema, RELEASE_WORKFLOW_FILE, type ReleasePlan, ReleasePlanSchema, type ReleaseReport, type ReleaseResult, ReleaseResultSchema, type RepoConfig, RepoConfigSchema, type VersioningConfig, VersioningConfigSchema, type VersioningScheme, VersioningSchemeSchema, aggregateBumps, excerpt, extractTickets, maxBump, parseReleasePlan, releaseBranchName, releaseTagName };

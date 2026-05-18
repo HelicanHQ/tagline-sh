@@ -9,17 +9,13 @@
 // 52-test bot service suite (`pnpm --filter @tagline-sh/bot test`).
 // Phase 3 will introduce a real-GitHub variant of this script that swaps the
 // FakeGitHubReader for a live Octokit-backed implementation.
-
 import type { ReleaseReport } from '@tagline-sh/shared';
 import { attributePRsToPackages, detectMonorepo } from '../src/services/monorepo-detector.js';
 import { readRepoConfig } from '../src/services/config-reader.js';
 import { aggregatePRBumps, parsePR } from '../src/services/commit-parser.js';
 import { calculateNextVersion } from '../src/services/version-calculator.js';
 import { deterministicReport } from '../src/services/report-generator.js';
-import {
-    FakeGitHubReader,
-    ANY_REPO,
-} from '../test/fixtures/fake-reader.js';
+import { FakeGitHubReader, ANY_REPO } from '../test/fixtures/fake-reader.js';
 
 async function main(): Promise<void> {
     const reader = new FakeGitHubReader({
@@ -68,7 +64,10 @@ async function main(): Promise<void> {
         }),
     );
 
-    const _attributed = attributePRsToPackages(monorepo, parsed.map((pr) => ({ pr, files: [] })));
+    const _attributed = attributePRsToPackages(
+        monorepo,
+        parsed.map((pr) => ({ pr, files: [] })),
+    );
 
     const suggestedBump = aggregatePRBumps(parsed);
     const currentVersion = '1.4.2';
@@ -91,6 +90,7 @@ async function main(): Promise<void> {
         isMonorepo: monorepo.type !== 'none',
         monorepoInfo: monorepo.type === 'none' ? null : monorepo,
         generatedAt: new Date().toISOString(),
+        versioningScheme: 'semver',
     };
 
     console.log(JSON.stringify(report, null, 2));

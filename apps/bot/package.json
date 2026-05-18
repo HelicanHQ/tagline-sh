@@ -29,6 +29,7 @@
     },
     "devDependencies": {
         "@types/mdast": "^4.0.4",
+        "@types/node": "^24.0.0",
         "@types/picomatch": "^3.0.1",
         "@types/semver": "^7.5.8",
         "pino-pretty": "^11.3.0",

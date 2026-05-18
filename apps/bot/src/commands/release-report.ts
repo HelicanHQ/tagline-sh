@@ -94,6 +94,7 @@ export async function buildReleaseReport(
         suggestedBump,
         suggestedVersion,
         currentVersion,
+        versioningScheme: config.versioning.scheme,
         reasoning: aiOutput.reasoning,
         changelogPreview: aiOutput.changelogPreview,
         isMonorepo: monorepoInfo !== null,

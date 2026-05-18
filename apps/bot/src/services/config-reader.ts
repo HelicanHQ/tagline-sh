@@ -2,7 +2,13 @@ import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import { visit } from 'unist-util-visit';
 import type { Heading, List, ListItem, Root, Text } from 'mdast';
-import { DEFAULT_CONFIG, type RepoConfig } from '@tagline-sh/shared';
+import {
+    DEFAULT_CONFIG,
+    DEFAULT_VERSIONING,
+    type RepoConfig,
+    type VersioningConfig,
+    type VersioningScheme,
+} from '@tagline-sh/shared';
 import type { GitHubReader, RepoRef } from './github-reader.js';
 
 const CONFIG_FILE = '.release-agent.md';
@@ -12,10 +18,18 @@ const CONFIG_FILE = '.release-agent.md';
 const BRANCHES_HEADING = /^branches$/i;
 const PRERELEASE_HEADING = /^pre[- ]?release tags?$/i;
 const NOTES_HEADING = /^release notes? style$/i;
+const VERSIONING_HEADING = /^versioning$/i;
+
+const VALID_SCHEMES: ReadonlySet<VersioningScheme> = new Set([
+    'semver',
+    'calver',
+    'incremental',
+]);
 
 interface ParsedSections {
     branches: Record<string, string>;
     preRelease: Record<string, string>;
+    versioning: Record<string, string>;
     notesStyle: string;
     customContext: string;
 }
@@ -53,10 +67,32 @@ export async function readRepoConfig(
                 sections.preRelease['development'] ??
                 DEFAULT_CONFIG.preReleaseSuffix.development,
         },
+        versioning: resolveVersioning(sections.versioning),
         releaseNotesStyle: sections.notesStyle.trim(),
         customContext: sections.customContext.trim(),
         rawContent: content,
     };
+}
+
+/**
+ * Translate the parsed `## Versioning` key/value pairs into a `VersioningConfig`.
+ *
+ * Recognized keys:
+ *   - `scheme`: one of `semver`, `calver`, `incremental` (case-insensitive)
+ *   - `pattern`: calver pattern string; only meaningful when `scheme: calver`
+ *
+ * Unknown / invalid scheme values fall back to the semver default rather than
+ * throwing — a misconfigured file shouldn't break the bot. The user will see
+ * the silently-applied default reflected in the report's reasoning section.
+ */
+function resolveVersioning(entries: Record<string, string>): VersioningConfig {
+    const rawScheme = (entries['scheme'] ?? '').trim().toLowerCase();
+    const scheme: VersioningScheme = VALID_SCHEMES.has(rawScheme as VersioningScheme)
+        ? (rawScheme as VersioningScheme)
+        : DEFAULT_VERSIONING.scheme;
+
+    const pattern = entries['pattern']?.trim() ?? null;
+    return { scheme, pattern: pattern && pattern.length > 0 ? pattern : null };
 }
 
 // --- Markdown parsing --------------------------------------------------------
@@ -73,6 +109,7 @@ function parseSections(markdown: string): ParsedSections {
 
     const branches: Record<string, string> = {};
     const preRelease: Record<string, string> = {};
+    const versioning: Record<string, string> = {};
     const notesStyleParts: string[] = [];
     const customContextParts: string[] = [];
 
@@ -94,6 +131,8 @@ function parseSections(markdown: string): ParsedSections {
             Object.assign(branches, extractKeyValueList(currentBody));
         } else if (PRERELEASE_HEADING.test(currentHeading)) {
             Object.assign(preRelease, extractKeyValueList(currentBody));
+        } else if (VERSIONING_HEADING.test(currentHeading)) {
+            Object.assign(versioning, extractKeyValueList(currentBody));
         } else if (NOTES_HEADING.test(currentHeading)) {
             notesStyleParts.push(stringifyNodes(markdown, currentBody));
         } else {
@@ -116,6 +155,7 @@ function parseSections(markdown: string): ParsedSections {
     return {
         branches,
         preRelease,
+        versioning,
         notesStyle: notesStyleParts.join('\n\n'),
         customContext: customContextParts.join('\n\n'),
     };

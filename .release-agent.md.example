@@ -3,10 +3,10 @@
 # This file is optional. Tagline works out of the box with sensible defaults
 # for repos that follow conventional commits.
 #
-# The two sections below are parsed deterministically (look for `## Branches`
-# and `## Pre-release Tags`). Anything else in this file is passed to the AI
-# as free-form context — write whatever a teammate would need to know about
-# how your team releases.
+# Three sections below are parsed deterministically (look for `## Branches`,
+# `## Pre-release Tags`, and `## Versioning`). Anything else in this file is
+# passed to the AI as free-form context — write whatever a teammate would need
+# to know about how your team releases.
 
 ## Branches
 
@@ -18,6 +18,22 @@
 
 - staging suffix: rc
 - development suffix: alpha
+
+## Versioning
+
+# Optional. Default is `semver`. Set this when your repo releases via
+# calendar versioning or a simple incrementing counter instead.
+#
+# Schemes:
+#   - semver       (default) — conventional-commits drive patch/minor/major math.
+#   - calver       — pattern-driven from the current UTC date.
+#   - incremental  — trailing integer +1 per release.
+#
+# Calver tokens: YYYY, YY, 0Y, MM, 0M, DD, 0D, MICRO. MICRO is required.
+
+- scheme: semver
+# - scheme: calver
+# - pattern: YYYY.0M.MICRO
 
 ## Release Notes Style
 

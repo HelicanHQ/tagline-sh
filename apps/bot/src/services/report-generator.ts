@@ -23,7 +23,7 @@ const SYSTEM_PROMPT =
     'Only describe what is in the provided PR data.';
 
 function buildUserPrompt(input: ReportGeneratorInput): string {
-    const { prs, suggestedBump, config } = input;
+    const { prs, suggestedBump, suggestedVersion, config } = input;
     const prLines = prs
         .map((pr) => {
             const types = pr.commits.map((c) => c.type).join(', ') || 'chore';
@@ -37,6 +37,24 @@ function buildUserPrompt(input: ReportGeneratorInput): string {
         config.releaseNotesStyle ||
         'Write clear, concise release notes for a developer audience.';
     const ctx = config.customContext ? `\n\n${config.customContext}` : '';
+    const scheme = config.versioning.scheme;
+
+    // Scheme-specific guidance for the reasoning. For semver we ask the model
+    // to justify the bump category; for calver/incremental the version number
+    // is mechanically derived, so we ask the model to summarize the release's
+    // scope instead.
+    const reasoningTask =
+        scheme === 'semver'
+            ? `1. Write 2–3 sentences explaining WHY a \`${suggestedBump}\` bump is appropriate, ` +
+              'referencing specific PRs by number.'
+            : `1. Write 2–3 sentences summarizing what's in this release (version \`${suggestedVersion}\`, ` +
+              `scheme: ${scheme}). Reference specific PRs by number. Do not discuss semver bump categories — ` +
+              'the version is computed mechanically from the scheme.';
+
+    const versionLine =
+        scheme === 'semver'
+            ? `## Suggested version bump: ${suggestedBump} (→ ${suggestedVersion})`
+            : `## Computed next version: ${suggestedVersion} (scheme: ${scheme})`;
 
     return [
         'Generate a release report summary based on these merged pull requests.',
@@ -44,14 +62,13 @@ function buildUserPrompt(input: ReportGeneratorInput): string {
         '## Merged PRs',
         prLines,
         '',
-        `## Suggested version bump: ${suggestedBump}`,
+        versionLine,
         '',
         '## Repository context (from .release-agent.md):',
         style + ctx,
         '',
         '## Your task',
-        '1. Write 2–3 sentences explaining WHY the suggested version bump is appropriate,',
-        '   referencing specific PRs by number.',
+        reasoningTask,
         '2. Write a changelog preview in Keep a Changelog format (### Added, ### Fixed,',
         '   ### Changed, ### Removed sections — only include sections with content).',
         '   Each entry should be a single line. Reference PR numbers and ticket numbers where available.',

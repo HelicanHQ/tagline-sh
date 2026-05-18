@@ -158,7 +158,8 @@ async function runApprove(
             issue_number: issueNumber,
             body:
                 `${APP_DISPLAY_NAME}: I didn't understand that \`/approve\` command. ` +
-                'Valid forms: `/approve`, `/approve patch|minor|major`, plus `--draft` / `--dry-run`.',
+                'Valid forms: `/approve`, `/approve patch|minor|major`, `/approve as X.Y.Z`, ' +
+                'plus `--draft` / `--dry-run`.',
         });
         return;
     }
@@ -181,7 +182,18 @@ async function runApprove(
         const ai = readAIConfig();
         if (ai) buildInput.ai = ai;
 
-        const { plan, empty } = await buildApprovePlan(buildInput);
+        const result = await buildApprovePlan(buildInput);
+
+        if (!result.ok) {
+            await context.octokit.rest.issues.updateComment({
+                ...repo,
+                comment_id: ack.data.id,
+                body: `${APP_DISPLAY_NAME}: ${result.error}`,
+            });
+            return;
+        }
+
+        const { plan, empty } = result;
 
         if (empty) {
             await context.octokit.rest.issues.updateComment({
@@ -234,7 +246,7 @@ async function runApprove(
 }
 
 function buildDispatchAckBody(
-    plan: Awaited<ReturnType<typeof buildApprovePlan>>['plan'],
+    plan: Extract<Awaited<ReturnType<typeof buildApprovePlan>>, { ok: true }>['plan'],
     repo: { owner: string; repo: string },
 ): string {
     const tag = `v${plan.nextVersion}`;

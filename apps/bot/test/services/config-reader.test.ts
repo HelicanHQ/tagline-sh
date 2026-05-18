@@ -86,4 +86,33 @@ describe('readRepoConfig', () => {
         const cfg = await readRepoConfig(reader, ANY_REPO);
         expect(cfg.rawContent).toBe(FULL_CONFIG);
     });
+
+    it('defaults versioning.scheme to semver when no Versioning section', async () => {
+        const reader = new FakeGitHubReader({
+            files: { '.release-agent.md': FULL_CONFIG },
+        });
+        const cfg = await readRepoConfig(reader, ANY_REPO);
+        expect(cfg.versioning).toEqual({ scheme: 'semver', pattern: null });
+    });
+
+    it('parses a calver Versioning section', async () => {
+        const md = `## Versioning\n\n- scheme: calver\n- pattern: YYYY.0M.MICRO\n`;
+        const reader = new FakeGitHubReader({ files: { '.release-agent.md': md } });
+        const cfg = await readRepoConfig(reader, ANY_REPO);
+        expect(cfg.versioning).toEqual({ scheme: 'calver', pattern: 'YYYY.0M.MICRO' });
+    });
+
+    it('parses an incremental Versioning section', async () => {
+        const md = `## Versioning\n\n- scheme: incremental\n`;
+        const reader = new FakeGitHubReader({ files: { '.release-agent.md': md } });
+        const cfg = await readRepoConfig(reader, ANY_REPO);
+        expect(cfg.versioning).toEqual({ scheme: 'incremental', pattern: null });
+    });
+
+    it('falls back to semver for an unknown scheme value', async () => {
+        const md = `## Versioning\n\n- scheme: bogus\n`;
+        const reader = new FakeGitHubReader({ files: { '.release-agent.md': md } });
+        const cfg = await readRepoConfig(reader, ANY_REPO);
+        expect(cfg.versioning.scheme).toBe('semver');
+    });
 });

@@ -28,7 +28,9 @@ __export(index_exports, {
   BumpTypeSchema: () => BumpTypeSchema,
   COMMIT_TYPE_BUMP: () => COMMIT_TYPE_BUMP,
   CommitTypeSchema: () => CommitTypeSchema,
+  DEFAULT_CALVER_PATTERN: () => DEFAULT_CALVER_PATTERN,
   DEFAULT_CONFIG: () => DEFAULT_CONFIG,
+  DEFAULT_VERSIONING: () => DEFAULT_VERSIONING,
   MonorepoInfoSchema: () => MonorepoInfoSchema,
   MonorepoTypeSchema: () => MonorepoTypeSchema,
   PackageInfoSchema: () => PackageInfoSchema,
@@ -38,6 +40,8 @@ __export(index_exports, {
   ReleasePlanSchema: () => ReleasePlanSchema,
   ReleaseResultSchema: () => ReleaseResultSchema,
   RepoConfigSchema: () => RepoConfigSchema,
+  VersioningConfigSchema: () => VersioningConfigSchema,
+  VersioningSchemeSchema: () => VersioningSchemeSchema,
   aggregateBumps: () => aggregateBumps,
   excerpt: () => excerpt,
   extractTickets: () => extractTickets,
@@ -74,6 +78,11 @@ var BUMP_PRIORITY = {
   minor: 2,
   major: 3
 };
+var DEFAULT_CALVER_PATTERN = "YYYY.0M.MICRO";
+var DEFAULT_VERSIONING = {
+  scheme: "semver",
+  pattern: null
+};
 var DEFAULT_CONFIG = {
   branches: {
     production: "main",
@@ -84,6 +93,7 @@ var DEFAULT_CONFIG = {
     staging: "rc",
     development: "alpha"
   },
+  versioning: DEFAULT_VERSIONING,
   releaseNotesStyle: "",
   customContext: "",
   rawContent: ""
@@ -151,7 +161,9 @@ var CommitTypeSchema = import_zod.z.enum([
   "ci",
   "chore",
   "revert",
-  "breaking"
+  "breaking",
+  "hotfix",
+  "release"
 ]);
 var BumpTypeSchema = import_zod.z.enum(["major", "minor", "patch", "none"]);
 var MonorepoTypeSchema = import_zod.z.enum([
@@ -195,6 +207,11 @@ var MonorepoInfoSchema = import_zod.z.object({
   packages: import_zod.z.array(PackageInfoSchema),
   rootPackage: PackageInfoSchema.nullable()
 });
+var VersioningSchemeSchema = import_zod.z.enum(["semver", "calver", "incremental"]);
+var VersioningConfigSchema = import_zod.z.object({
+  scheme: VersioningSchemeSchema,
+  pattern: import_zod.z.string().nullable()
+});
 var RepoConfigSchema = import_zod.z.object({
   branches: import_zod.z.object({
     production: import_zod.z.string(),
@@ -205,6 +222,7 @@ var RepoConfigSchema = import_zod.z.object({
     staging: import_zod.z.string(),
     development: import_zod.z.string()
   }),
+  versioning: VersioningConfigSchema,
   releaseNotesStyle: import_zod.z.string(),
   customContext: import_zod.z.string(),
   rawContent: import_zod.z.string()
@@ -250,7 +268,9 @@ function parseReleasePlan(json) {
   BumpTypeSchema,
   COMMIT_TYPE_BUMP,
   CommitTypeSchema,
+  DEFAULT_CALVER_PATTERN,
   DEFAULT_CONFIG,
+  DEFAULT_VERSIONING,
   MonorepoInfoSchema,
   MonorepoTypeSchema,
   PackageInfoSchema,
@@ -260,6 +280,8 @@ function parseReleasePlan(json) {
   ReleasePlanSchema,
   ReleaseResultSchema,
   RepoConfigSchema,
+  VersioningConfigSchema,
+  VersioningSchemeSchema,
   aggregateBumps,
   excerpt,
   extractTickets,

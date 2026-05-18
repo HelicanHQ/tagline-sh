@@ -24,6 +24,11 @@ var BUMP_PRIORITY = {
   minor: 2,
   major: 3
 };
+var DEFAULT_CALVER_PATTERN = "YYYY.0M.MICRO";
+var DEFAULT_VERSIONING = {
+  scheme: "semver",
+  pattern: null
+};
 var DEFAULT_CONFIG = {
   branches: {
     production: "main",
@@ -34,6 +39,7 @@ var DEFAULT_CONFIG = {
     staging: "rc",
     development: "alpha"
   },
+  versioning: DEFAULT_VERSIONING,
   releaseNotesStyle: "",
   customContext: "",
   rawContent: ""
@@ -101,7 +107,9 @@ var CommitTypeSchema = z.enum([
   "ci",
   "chore",
   "revert",
-  "breaking"
+  "breaking",
+  "hotfix",
+  "release"
 ]);
 var BumpTypeSchema = z.enum(["major", "minor", "patch", "none"]);
 var MonorepoTypeSchema = z.enum([
@@ -145,6 +153,11 @@ var MonorepoInfoSchema = z.object({
   packages: z.array(PackageInfoSchema),
   rootPackage: PackageInfoSchema.nullable()
 });
+var VersioningSchemeSchema = z.enum(["semver", "calver", "incremental"]);
+var VersioningConfigSchema = z.object({
+  scheme: VersioningSchemeSchema,
+  pattern: z.string().nullable()
+});
 var RepoConfigSchema = z.object({
   branches: z.object({
     production: z.string(),
@@ -155,6 +168,7 @@ var RepoConfigSchema = z.object({
     staging: z.string(),
     development: z.string()
   }),
+  versioning: VersioningConfigSchema,
   releaseNotesStyle: z.string(),
   customContext: z.string(),
   rawContent: z.string()
@@ -199,7 +213,9 @@ export {
   BumpTypeSchema,
   COMMIT_TYPE_BUMP,
   CommitTypeSchema,
+  DEFAULT_CALVER_PATTERN,
   DEFAULT_CONFIG,
+  DEFAULT_VERSIONING,
   MonorepoInfoSchema,
   MonorepoTypeSchema,
   PackageInfoSchema,
@@ -209,6 +225,8 @@ export {
   ReleasePlanSchema,
   ReleaseResultSchema,
   RepoConfigSchema,
+  VersioningConfigSchema,
+  VersioningSchemeSchema,
   aggregateBumps,
   excerpt,
   extractTickets,

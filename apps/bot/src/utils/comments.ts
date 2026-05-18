@@ -96,7 +96,11 @@ export function reportComment(report: ReleaseReport): string {
 
     if (groups.feat.length > 0) {
         lines.push('');
-        lines.push(`${SECTION_HEADERS.feat} · suggests \`${bumpHint}\` bump`);
+        // The "suggests X bump" hint only carries meaning for semver — calver
+        // and incremental compute the version mechanically.
+        const suffix =
+            report.versioningScheme === 'semver' ? ` · suggests \`${bumpHint}\` bump` : '';
+        lines.push(`${SECTION_HEADERS.feat}${suffix}`);
         lines.push('');
         for (const pr of groups.feat) lines.push(prLine(pr));
     }
@@ -118,7 +122,14 @@ export function reportComment(report: ReleaseReport): string {
     lines.push('');
     lines.push('### Recommendation');
     lines.push('');
-    lines.push(`**Suggested bump:** \`${bumpHint}\` → \`v${report.suggestedVersion}\``);
+    if (report.versioningScheme === 'semver') {
+        lines.push(`**Suggested bump:** \`${bumpHint}\` → \`v${report.suggestedVersion}\``);
+    } else {
+        lines.push(
+            `**Next version:** \`v${report.suggestedVersion}\` ` +
+                `_(scheme: ${report.versioningScheme})_`,
+        );
+    }
     lines.push('');
     for (const line of report.reasoning.split('\n')) lines.push(`> ${line}`);
 
@@ -135,11 +146,26 @@ export function reportComment(report: ReleaseReport): string {
     lines.push('---');
     lines.push('');
     lines.push('Reply with a command to release:');
-    lines.push(
-        '`/approve` &nbsp; `/approve patch` &nbsp; `/approve minor` &nbsp; `/approve major` &nbsp; `/approve --draft` &nbsp; `/approve --dry-run`',
-    );
+    lines.push(approveCommandHints(report.versioningScheme));
 
     return lines.join('\n');
+}
+
+/**
+ * Render the inline `/approve` quick-pick suggestions at the bottom of the
+ * report comment. SemVer offers bump words; calver / incremental offer the
+ * `as <version>` override instead because bump words are rejected.
+ */
+function approveCommandHints(scheme: ReleaseReport['versioningScheme']): string {
+    const flags = '`/approve --draft` &nbsp; `/approve --dry-run`';
+    if (scheme === 'semver') {
+        return (
+            '`/approve` &nbsp; `/approve patch` &nbsp; `/approve minor` &nbsp; ' +
+            '`/approve major` &nbsp; ' +
+            flags
+        );
+    }
+    return '`/approve` &nbsp; `/approve as <version>` &nbsp; ' + flags;
 }
 
 /** No-PRs-since-last-tag message. */
