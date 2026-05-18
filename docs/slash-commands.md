@@ -53,6 +53,8 @@ The action does the actual writes in your CI environment: bumps `package.json`, 
 - The actor lacks write access → bot replies asking them to ask someone with write access.
 - The bump argument is invalid → bot replies with the usage line.
 - Tag already exists → action fails with `Tag vX.Y.Z already exists. Has this release already been triggered?`
+- Action logs `Resource not accessible by integration` → your workflow `permissions:` block is missing one of `contents: write`, `pull-requests: write`, or `issues: write`. See [Required workflow permissions](./getting-started.md#required-workflow-permissions). If the failure is *specifically* on the completion comment, the release itself still succeeded — the bot just couldn't post the courtesy comment.
+- Action logs `GitHub Actions is not permitted to create or approve pull requests` → separate from `permissions:`. Enable the toggle at *Settings → Actions → General → Workflow permissions → "Allow GitHub Actions to create and approve pull requests"* (and the same setting at org level if your repo lives in an org). The release itself still ships — the tag, GitHub release, and release branch are all pushed — and the completion comment now includes a direct `compare` URL to open the missing PR by hand.
 
 ## Comment lifecycle
 

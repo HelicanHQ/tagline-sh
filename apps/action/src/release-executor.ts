@@ -77,15 +77,33 @@ export async function executeRelease(
         core.info(`  ${releaseUrl}`);
 
         core.info(`Step 5/8: Opening changelog PR`);
-        const pr = await openReleasePR(plan, deps.octokit);
-        prUrl = pr.prUrl;
-        core.info(`  ${prUrl}`);
+        let prError: string | null = null;
+        try {
+            const pr = await openReleasePR(plan, deps.octokit);
+            prUrl = pr.prUrl;
+            core.info(`  ${prUrl}`);
+        } catch (err) {
+            // The tag + GitHub release are already public at this point. A PR
+            // failure (commonly: org/repo "Allow GitHub Actions to create PRs"
+            // toggle is off) is annoying but doesn't undo the release. Surface
+            // it clearly and let the user open the PR manually.
+            prError = err instanceof Error ? err.message : String(err);
+            core.warning(`Could not open changelog PR: ${prError}`);
+            if (/not permitted/i.test(prError)) {
+                core.warning(
+                    'Enable "Allow GitHub Actions to create and approve pull requests" at ' +
+                        'Settings → Actions → General → Workflow permissions (repo AND org if applicable), ' +
+                        'then open the PR manually from the pushed release branch.',
+                );
+            }
+        }
 
         core.info(`Step 6/8: Posting completion comment`);
         await tryPostCompletion(plan, deps.octokit, {
             releaseUrl,
             prUrl,
             dryRun: false,
+            ...(prError ? { prError } : {}),
         });
 
         core.setOutput('version', plan.nextVersion);

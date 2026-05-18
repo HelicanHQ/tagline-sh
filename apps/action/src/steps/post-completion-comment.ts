@@ -1,4 +1,9 @@
-import { APP_DISPLAY_NAME, releaseTagName, type ReleasePlan } from '@tagline-sh/shared';
+import {
+    APP_DISPLAY_NAME,
+    releaseBranchName,
+    releaseTagName,
+    type ReleasePlan,
+} from '@tagline-sh/shared';
 
 export interface CommentOctokit {
     rest: {
@@ -19,6 +24,13 @@ export interface CompletionContext {
     dryRun: boolean;
     /** When set, a step before completion failed; we post a failure comment instead. */
     error?: string;
+    /**
+     * Set when the release shipped (tag + GitHub release exist) but the
+     * follow-up PR couldn't be opened — typically because the org/repo
+     * "Allow GitHub Actions to create PRs" toggle is off. We surface this in
+     * the success comment with the manual-recovery branch name.
+     */
+    prError?: string;
 }
 
 /**
@@ -37,7 +49,7 @@ export async function postCompletionComment(
     const tag = releaseTagName(plan.nextVersion);
     const body = ctx.error
         ? buildFailureBody(tag, ctx.error)
-        : buildSuccessBody(tag, ctx);
+        : buildSuccessBody(plan, tag, ctx);
 
     await octokit.rest.issues.createComment({
         owner: plan.repoOwner,
@@ -47,7 +59,7 @@ export async function postCompletionComment(
     });
 }
 
-function buildSuccessBody(tag: string, ctx: CompletionContext): string {
+function buildSuccessBody(plan: ReleasePlan, tag: string, ctx: CompletionContext): string {
     if (ctx.dryRun) {
         return [
             `${APP_DISPLAY_NAME} dry-run complete for \`${tag}\`. No changes were made to the repo.`,
@@ -58,6 +70,22 @@ function buildSuccessBody(tag: string, ctx: CompletionContext): string {
     const lines = [`${APP_DISPLAY_NAME} released \`${tag}\` 🎉`, ''];
     if (ctx.releaseUrl) lines.push(`- GitHub release: ${ctx.releaseUrl}`);
     if (ctx.prUrl) lines.push(`- Changelog PR: ${ctx.prUrl}`);
+
+    if (!ctx.prUrl && ctx.prError) {
+        const branch = releaseBranchName(plan.nextVersion);
+        const compareUrl = `https://github.com/${plan.repoOwner}/${plan.repoName}/compare/${plan.baseBranch}...${branch}`;
+        lines.push('');
+        lines.push(`⚠️ The release shipped, but I couldn't open the changelog PR: \`${ctx.prError}\``);
+        lines.push('');
+        lines.push(`Open it manually: ${compareUrl}`);
+        lines.push('');
+        lines.push(
+            'To let future releases open this PR automatically, enable ' +
+                '*Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests"* ' +
+                '(both at repo and, if applicable, org level).',
+        );
+    }
+
     return lines.join('\n');
 }
 

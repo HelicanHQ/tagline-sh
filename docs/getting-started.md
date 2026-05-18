@@ -26,6 +26,19 @@ Copy [`examples/single-repo/.github/workflows/release-agent.yml`](../examples/si
 
 This workflow is only invoked via `workflow_dispatch`, triggered by the bot when you `/approve`. It never runs on its own.
 
+### Required workflow permissions
+
+The workflow's `permissions:` block must grant exactly three things — these scope the `GITHUB_TOKEN` the action uses inside the run, and are separate from the GitHub App's own permissions:
+
+```yaml
+permissions:
+    contents: write          # commit version bumps, push the release branch + tag, create the GitHub release
+    pull-requests: write     # open the changelog PR back to the production branch
+    issues: write            # post the completion comment on the originating issue
+```
+
+The example workflow files already include these. If you build your own workflow and see `Resource not accessible by integration` in the Actions log, you're missing one of the three — most commonly `issues: write`.
+
 ## Step 3 — set the AI secret
 
 Tagline calls an **OpenAI-compatible** endpoint for the report's reasoning. Any provider works — OpenAI, OpenRouter, Anthropic via proxy, Groq, Ollama.

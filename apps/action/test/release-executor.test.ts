@@ -142,4 +142,29 @@ describe('executeRelease — failure path', () => {
         const body = calls.createComment.mock.calls[0]?.[0] as { body: string };
         expect(body.body).toContain('failed to release');
     });
+
+    it('treats a PR-creation failure as non-fatal (tag + release already shipped)', async () => {
+        const { octokit, calls } = fakeOctokit();
+        // The PR call rejects — simulating the org/repo "Allow Actions to create PRs" toggle being off.
+        calls.createPR.mockRejectedValueOnce(
+            new Error('GitHub Actions is not permitted to create or approve pull requests.'),
+        );
+        const git = fakeGit();
+
+        const result = await executeRelease(makePlan(), {
+            octokit,
+            workspaceRoot: dir,
+            git: git as unknown as Parameters<typeof executeRelease>[1]['git'],
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.releaseUrl).toContain('/releases/tag/v1.5.0');
+        expect(result.prUrl).toBeNull();
+
+        const body = calls.createComment.mock.calls[0]?.[0] as { body: string };
+        expect(body.body).toContain('released `v1.5.0`');
+        expect(body.body).toContain("couldn't open the changelog PR");
+        expect(body.body).toContain('/compare/main...release/v1.5.0');
+        expect(body.body).toContain('Allow GitHub Actions to create and approve pull requests');
+    });
 });
