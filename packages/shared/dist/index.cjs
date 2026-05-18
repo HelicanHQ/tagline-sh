@@ -36,6 +36,7 @@ __export(index_exports, {
   PackageInfoSchema: () => PackageInfoSchema,
   ParsedCommitSchema: () => ParsedCommitSchema,
   ParsedPRSchema: () => ParsedPRSchema,
+  RELEASE_BRANCH_PREFIX: () => RELEASE_BRANCH_PREFIX,
   RELEASE_WORKFLOW_FILE: () => RELEASE_WORKFLOW_FILE,
   ReleasePlanSchema: () => ReleasePlanSchema,
   ReleaseResultSchema: () => ReleaseResultSchema,
@@ -45,6 +46,7 @@ __export(index_exports, {
   aggregateBumps: () => aggregateBumps,
   excerpt: () => excerpt,
   extractTickets: () => extractTickets,
+  isReleaseBranch: () => isReleaseBranch,
   maxBump: () => maxBump,
   parseReleasePlan: () => parseReleasePlan,
   releaseBranchName: () => releaseBranchName,
@@ -122,9 +124,13 @@ function extractTickets(text) {
   for (const match of text.matchAll(projRe)) push(match[0]);
   return out;
 }
+var RELEASE_BRANCH_PREFIX = "release/v";
 function releaseBranchName(version) {
   const stripped = version.startsWith("v") ? version.slice(1) : version;
-  return `release/v${stripped}`;
+  return `${RELEASE_BRANCH_PREFIX}${stripped}`;
+}
+function isReleaseBranch(headRef) {
+  return headRef.startsWith(RELEASE_BRANCH_PREFIX);
 }
 function releaseTagName(version) {
   return version.startsWith("v") ? version : `v${version}`;
@@ -276,6 +282,7 @@ function parseReleasePlan(json) {
   PackageInfoSchema,
   ParsedCommitSchema,
   ParsedPRSchema,
+  RELEASE_BRANCH_PREFIX,
   RELEASE_WORKFLOW_FILE,
   ReleasePlanSchema,
   ReleaseResultSchema,
@@ -285,6 +292,7 @@ function parseReleasePlan(json) {
   aggregateBumps,
   excerpt,
   extractTickets,
+  isReleaseBranch,
   maxBump,
   parseReleasePlan,
   releaseBranchName,

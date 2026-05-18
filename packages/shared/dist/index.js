@@ -68,9 +68,13 @@ function extractTickets(text) {
   for (const match of text.matchAll(projRe)) push(match[0]);
   return out;
 }
+var RELEASE_BRANCH_PREFIX = "release/v";
 function releaseBranchName(version) {
   const stripped = version.startsWith("v") ? version.slice(1) : version;
-  return `release/v${stripped}`;
+  return `${RELEASE_BRANCH_PREFIX}${stripped}`;
+}
+function isReleaseBranch(headRef) {
+  return headRef.startsWith(RELEASE_BRANCH_PREFIX);
 }
 function releaseTagName(version) {
   return version.startsWith("v") ? version : `v${version}`;
@@ -221,6 +225,7 @@ export {
   PackageInfoSchema,
   ParsedCommitSchema,
   ParsedPRSchema,
+  RELEASE_BRANCH_PREFIX,
   RELEASE_WORKFLOW_FILE,
   ReleasePlanSchema,
   ReleaseResultSchema,
@@ -230,6 +235,7 @@ export {
   aggregateBumps,
   excerpt,
   extractTickets,
+  isReleaseBranch,
   maxBump,
   parseReleasePlan,
   releaseBranchName,

@@ -147,6 +147,41 @@ describe('getPRsSinceLastTag', () => {
         expect(lastTag).toBeNull();
         expect(prs).toHaveLength(1);
     });
+
+    it('filters out the previous release PR (head ref `release/v…`)', async () => {
+        // Reproduces the velaops scenario: previous tag is `v2026.5.9` (on the
+        // release-branch tip), and the actual merge of PR #68 — which created
+        // that tag's branch — lands on `main` slightly after the tag's
+        // commitDate. Without the filter, PR #68 leaks into the next release.
+        const reader = new FakeGitHubReader({
+            tags: [{ name: 'v2026.5.9', sha: 'a', commitDate: '2026-05-18T10:00:00Z' }],
+            mergedPRs: [
+                {
+                    number: 68,
+                    title: 'chore(release): v2026.5.9 [skip ci]',
+                    body: 'changelog with #55 #58 #61 references…',
+                    url: 'u68',
+                    author: 'github-actions[bot]',
+                    mergedAt: '2026-05-18T10:05:00Z', // AFTER tag's commitDate
+                    baseRef: 'main',
+                    headRef: 'release/v2026.5.9',
+                },
+                {
+                    number: 71,
+                    title: 'feat: real change',
+                    body: null,
+                    url: 'u71',
+                    author: 'dev',
+                    mergedAt: '2026-05-19T09:00:00Z',
+                    baseRef: 'main',
+                    headRef: 'feat/real-change',
+                },
+            ],
+        });
+        const { prs } = await getPRsSinceLastTag(reader, ANY_REPO, 'main');
+        // Only the real feature PR survives — the bot's own release PR is gone.
+        expect(prs.map((p) => p.number)).toEqual([71]);
+    });
 });
 
 describe('hydratePRs', () => {

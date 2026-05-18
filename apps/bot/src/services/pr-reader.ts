@@ -6,7 +6,7 @@ import type {
     TagRef,
 } from './github-reader.js';
 import { parsePR } from './commit-parser.js';
-import type { ParsedPR } from '@tagline-sh/shared';
+import { isReleaseBranch, type ParsedPR } from '@tagline-sh/shared';
 
 // Matches `v1.2.3`, `v1.2.3-rc.0`, `1.2.3` etc. Tightened to require a
 // numeric major to avoid catching arbitrary git tags.
@@ -70,6 +70,14 @@ export async function getCurrentVersion(
 /**
  * Merged PRs targeting `branch`, since the last release tag (or all PRs if no
  * tag exists yet — i.e. this is the first release).
+ *
+ * Filters out the bot's own previous release PRs (head ref starts with
+ * `release/v…`). The tag for `vN` lives on the *release-branch tip*, which is
+ * older than the merge commit that lands the release PR on the production
+ * branch — so the previous release PR satisfies `merged > tag.commitDate` and
+ * would otherwise become the only "change" picked up next time. Worse, its
+ * body is the previous changelog full of `#N` references that get extracted
+ * as tickets, producing a single mega-bullet with every prior PR linked.
  */
 export async function getPRsSinceLastTag(
     reader: GitHubReader,
@@ -78,7 +86,8 @@ export async function getPRsSinceLastTag(
 ): Promise<{ prs: PullRequestSummary[]; lastTag: TagRef | null }> {
     const lastTag = await getLastReleaseTag(reader, repo);
     const since = lastTag?.commitDate ?? null;
-    const prs = await reader.listMergedPRs(repo, branch, since);
+    const all = await reader.listMergedPRs(repo, branch, since);
+    const prs = all.filter((pr) => !isReleaseBranch(pr.headRef));
     return { prs, lastTag };
 }
 

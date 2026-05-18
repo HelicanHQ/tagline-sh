@@ -163,8 +163,21 @@ declare const RELEASE_WORKFLOW_FILE = "release-agent.yml";
  * No external API calls — pure regex on the supplied text.
  */
 declare function extractTickets(text: string): string[];
+/**
+ * Prefix every release branch shares (`release/v…`). Used by readers that need
+ * to recognize bot-authored release PRs without depending on a specific version
+ * string.
+ */
+declare const RELEASE_BRANCH_PREFIX = "release/v";
 /** Branch name used for the release PR. e.g. `release/v1.2.3` */
 declare function releaseBranchName(version: string): string;
+/**
+ * Returns true if `headRef` looks like one of our own release branches
+ * (`release/v1.2.3`, `release/v2026.05.0-rc.0`, etc.). Used to filter the
+ * previous release PR out of the next release's changelog — its body is the
+ * old changelog and would otherwise leak hundreds of `#N` refs as tickets.
+ */
+declare function isReleaseBranch(headRef: string): boolean;
 /** Tag name written by the action. e.g. `v1.2.3` */
 declare function releaseTagName(version: string): string;
 /** Returns the higher-impact of two bumps. `major > minor > patch > none`. */
@@ -708,4 +721,4 @@ declare const ReleaseResultSchema: z.ZodObject<{
 /** Parse a JSON-encoded ReleasePlan, throwing a typed ZodError on malformed input. */
 declare function parseReleasePlan(json: string): z.infer<typeof ReleasePlanSchema>;
 
-export { AI_DEFAULTS, APP_DISPLAY_NAME, APP_PACKAGE_NAME, BOT_GIT_IDENTITY, BUMP_PRIORITY, type BumpType, BumpTypeSchema, COMMIT_TYPE_BUMP, type CommitType, CommitTypeSchema, DEFAULT_CALVER_PATTERN, DEFAULT_CONFIG, DEFAULT_VERSIONING, type MonorepoInfo, MonorepoInfoSchema, type MonorepoType, MonorepoTypeSchema, type PackageInfo, PackageInfoSchema, type ParsedCommit, ParsedCommitSchema, type ParsedPR, ParsedPRSchema, RELEASE_WORKFLOW_FILE, type ReleasePlan, ReleasePlanSchema, type ReleaseReport, type ReleaseResult, ReleaseResultSchema, type RepoConfig, RepoConfigSchema, type VersioningConfig, VersioningConfigSchema, type VersioningScheme, VersioningSchemeSchema, aggregateBumps, excerpt, extractTickets, maxBump, parseReleasePlan, releaseBranchName, releaseTagName };
+export { AI_DEFAULTS, APP_DISPLAY_NAME, APP_PACKAGE_NAME, BOT_GIT_IDENTITY, BUMP_PRIORITY, type BumpType, BumpTypeSchema, COMMIT_TYPE_BUMP, type CommitType, CommitTypeSchema, DEFAULT_CALVER_PATTERN, DEFAULT_CONFIG, DEFAULT_VERSIONING, type MonorepoInfo, MonorepoInfoSchema, type MonorepoType, MonorepoTypeSchema, type PackageInfo, PackageInfoSchema, type ParsedCommit, ParsedCommitSchema, type ParsedPR, ParsedPRSchema, RELEASE_BRANCH_PREFIX, RELEASE_WORKFLOW_FILE, type ReleasePlan, ReleasePlanSchema, type ReleaseReport, type ReleaseResult, ReleaseResultSchema, type RepoConfig, RepoConfigSchema, type VersioningConfig, VersioningConfigSchema, type VersioningScheme, VersioningSchemeSchema, aggregateBumps, excerpt, extractTickets, isReleaseBranch, maxBump, parseReleasePlan, releaseBranchName, releaseTagName };

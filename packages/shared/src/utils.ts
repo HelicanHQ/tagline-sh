@@ -41,10 +41,27 @@ export function extractTickets(text: string): string[] {
     return out;
 }
 
+/**
+ * Prefix every release branch shares (`release/v…`). Used by readers that need
+ * to recognize bot-authored release PRs without depending on a specific version
+ * string.
+ */
+export const RELEASE_BRANCH_PREFIX = 'release/v';
+
 /** Branch name used for the release PR. e.g. `release/v1.2.3` */
 export function releaseBranchName(version: string): string {
     const stripped = version.startsWith('v') ? version.slice(1) : version;
-    return `release/v${stripped}`;
+    return `${RELEASE_BRANCH_PREFIX}${stripped}`;
+}
+
+/**
+ * Returns true if `headRef` looks like one of our own release branches
+ * (`release/v1.2.3`, `release/v2026.05.0-rc.0`, etc.). Used to filter the
+ * previous release PR out of the next release's changelog — its body is the
+ * old changelog and would otherwise leak hundreds of `#N` refs as tickets.
+ */
+export function isReleaseBranch(headRef: string): boolean {
+    return headRef.startsWith(RELEASE_BRANCH_PREFIX);
 }
 
 /** Tag name written by the action. e.g. `v1.2.3` */
