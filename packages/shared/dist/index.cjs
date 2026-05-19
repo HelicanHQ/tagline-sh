@@ -108,7 +108,7 @@ var DEFAULT_CONFIG = {
 };
 var AI_DEFAULTS = {
   baseUrl: "https://openrouter.ai/api/v1",
-  model: "openai/gpt-4o-mini"
+  model: "google/gemini-3.1-flash-lite-preview"
 };
 var RELEASE_WORKFLOW_FILE = "release-agent.yml";
 

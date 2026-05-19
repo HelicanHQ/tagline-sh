@@ -7,8 +7,9 @@ branding:
 
 inputs:
     release_plan:
-        description: 'JSON-encoded ReleasePlan object (provided by the Tagline bot)'
-        required: true
+        description: 'JSON-encoded ReleasePlan object (provided by the Tagline bot). Required for workflow_dispatch (propose mode); ignored for pull_request: closed events (finalize mode).'
+        required: false
+        default: ''
     github_token:
         description: 'GitHub token with contents and pull-requests write permissions'
         required: true

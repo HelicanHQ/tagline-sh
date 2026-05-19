@@ -49,6 +49,54 @@ describe('bumpVersion — single repo', () => {
         const result = await bumpVersion(makePlan(), dir);
         expect(result.files).toEqual([]);
     });
+
+    it('preserves the entire file byte-for-byte except the version value (no full reformat)', async () => {
+        // This file has the exact whitespace shape a Prettier-formatted
+        // package.json would have: 4-space indent, multi-line scripts block
+        // with trailing newline inside the closing brace, blank line before
+        // dependencies. A naive JSON.stringify round-trip would mangle ALL
+        // of these, which is what was triggering downstream lint errors on
+        // the user's release commits.
+        const original = [
+            '{',
+            '    "name": "demo",',
+            '    "version": "1.4.2",',
+            '    "private": true,',
+            '    "scripts": {',
+            '        "build": "tsc",',
+            '        "test":  "vitest"',
+            '    },',
+            '',
+            '    "dependencies": {',
+            '        "react": "1.0.0"',
+            '    }',
+            '}',
+            '',
+        ].join('\n');
+        await fs.writeFile(path.join(dir, 'package.json'), original, 'utf8');
+
+        await bumpVersion(makePlan(), dir);
+
+        const updated = await fs.readFile(path.join(dir, 'package.json'), 'utf8');
+        // Only the version value changed; every other byte is identical.
+        const expected = original.replace('"version": "1.4.2"', '"version": "1.5.0"');
+        expect(updated).toBe(expected);
+        // Bonus assertions to make the failure mode obvious if this ever regresses:
+        expect(updated).toContain('"test":  "vitest"'); // double-space between key+value preserved
+        expect(updated).toContain('\n\n    "dependencies"'); // blank line preserved
+        // The dependency entry "react": "1.0.0" — same value shape as the
+        // current version — must not be touched. Surgical replace targets
+        // the FIRST `"version"`-keyed match only.
+        expect(updated).toContain('"react": "1.0.0"');
+    });
+
+    it('preserves tab indentation when the file uses tabs', async () => {
+        const original = '{\n\t"name": "demo",\n\t"version": "1.4.2"\n}\n';
+        await fs.writeFile(path.join(dir, 'package.json'), original, 'utf8');
+        await bumpVersion(makePlan(), dir);
+        const updated = await fs.readFile(path.join(dir, 'package.json'), 'utf8');
+        expect(updated).toBe('{\n\t"name": "demo",\n\t"version": "1.5.0"\n}\n');
+    });
 });
 
 describe('bumpVersion — monorepo', () => {

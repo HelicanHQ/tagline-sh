@@ -55,13 +55,62 @@ async function fileHasVersion(absPath: string): Promise<boolean> {
     }
 }
 
+/**
+ * Rewrite the `version` field of a package.json byte-surgically.
+ *
+ * Why not `JSON.parse` → mutate → `JSON.stringify`: a full round-trip
+ * reformats the entire file (loses author whitespace choices around colons,
+ * compacts multi-line arrays, fixes/breaks tabs vs spaces, drops the exact
+ * blank-line placement Prettier or the user's formatter set). That makes
+ * every release commit also a "reformat the world" commit, which trips
+ * Prettier/ESLint `format-on-commit` hooks downstream.
+ *
+ * Approach: parse JSON only to discover the *current* version string. Then
+ * use a regex anchored on the literal current value to find the one
+ * `"version": "<current>"` occurrence in the source text and swap just the
+ * value bytes. Every other byte of the file — quotes, indentation, comments
+ * (in JSONC tooling), trailing newlines, key order — is preserved verbatim.
+ *
+ * Falls back to the JSON round-trip when surgical replace can't find a
+ * match (file has no `version` field, value is not a literal string, etc.).
+ */
 async function rewriteVersion(absPath: string, nextVersion: string): Promise<void> {
     const raw = await fs.readFile(absPath, 'utf8');
+
+    let currentVersion: string | undefined;
+    try {
+        const parsed = JSON.parse(raw) as { version?: unknown };
+        if (typeof parsed.version === 'string') {
+            currentVersion = parsed.version;
+        }
+    } catch {
+        // Fall through to surgical replace anyway — a JSONC file with
+        // comments might fail JSON.parse but still be surgically editable.
+    }
+
+    if (currentVersion !== undefined) {
+        const escaped = currentVersion.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // Match the first `"version"\s*:\s*"<current>"` occurrence — for
+        // package.json this is reliably the top-level field. Non-global,
+        // so only the first match is replaced.
+        const re = new RegExp(`("version"\\s*:\\s*)"${escaped}"`);
+        if (re.test(raw)) {
+            const out = raw.replace(re, `$1"${nextVersion}"`);
+            if (out !== raw) {
+                await fs.writeFile(absPath, out, 'utf8');
+                return;
+            }
+        }
+    }
+
+    // Fallback: full JSON round-trip with detected indent. Triggers only
+    // when the surgical regex can't match — e.g. the file has no `version`
+    // field, the value isn't a plain string, or the file isn't pure JSON.
     const indent = detectIndent(raw);
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    parsed['version'] = nextVersion;
-    const out = JSON.stringify(parsed, null, indent) + (raw.endsWith('\n') ? '\n' : '');
-    await fs.writeFile(absPath, out, 'utf8');
+    const obj = JSON.parse(raw) as Record<string, unknown>;
+    obj['version'] = nextVersion;
+    const fallback = JSON.stringify(obj, null, indent) + (raw.endsWith('\n') ? '\n' : '');
+    await fs.writeFile(absPath, fallback, 'utf8');
 }
 
 function detectIndent(source: string): number {

@@ -98,6 +98,124 @@ describe('renderChangelogEntry', () => {
         expect(md).not.toContain('## [v2.0.0]');
     });
 
+    it('uses the PR title (prefix-stripped) instead of the first feat/fix commit subject', () => {
+        // Regression: a development → main PR carrying multiple unrelated
+        // commit streams used to be summarized by whichever feat/fix commit
+        // appeared first in its history, not by the reviewed PR title.
+        // Reproduces moeen-mahmud/remen#19: title "feat: improved designs"
+        // got changelogged as "tagline sh release bot implemented" because
+        // that was the first feat: commit inside the PR.
+        const md = renderChangelogEntry({
+            version: '0.3.0',
+            date: '2026-05-19',
+            prs: [
+                pr({
+                    number: 19,
+                    title: 'feat: improved designs',
+                    url: 'https://github.com/moeen-mahmud/remen/pull/19',
+                    commits: [
+                        {
+                            type: 'feat',
+                            scope: null,
+                            subject: 'tagline sh release bot implemented',
+                            body: null,
+                            isBreaking: false,
+                            sha: 'bf69398',
+                        },
+                        {
+                            type: 'fix',
+                            scope: null,
+                            subject: 'improved voice home styles',
+                            body: null,
+                            isBreaking: false,
+                            sha: '51c50a4',
+                        },
+                        {
+                            type: 'fix',
+                            scope: null,
+                            subject: 'waveform styles',
+                            body: null,
+                            isBreaking: false,
+                            sha: '327c9c1',
+                        },
+                    ],
+                    suggestedBump: 'minor',
+                }),
+            ],
+        });
+        expect(md).toContain('improved designs ([#19]');
+        expect(md).not.toContain('tagline sh release bot implemented');
+    });
+
+    it('strips scoped and breaking conventional-commit prefixes from PR titles', () => {
+        const md = renderChangelogEntry({
+            version: '2.0.0',
+            date: '2026-05-19',
+            prs: [
+                pr({
+                    number: 1,
+                    title: 'fix(api): handle empty payload',
+                    url: 'u1',
+                    commits: [
+                        {
+                            type: 'fix',
+                            scope: 'api',
+                            subject: 'handle empty payload',
+                            body: null,
+                            isBreaking: false,
+                            sha: 'a',
+                        },
+                    ],
+                }),
+                pr({
+                    number: 2,
+                    title: 'feat!: drop legacy /v1 endpoint',
+                    url: 'u2',
+                    commits: [
+                        {
+                            type: 'feat',
+                            scope: null,
+                            subject: 'drop legacy /v1 endpoint',
+                            body: null,
+                            isBreaking: true,
+                            sha: 'b',
+                        },
+                    ],
+                    suggestedBump: 'major',
+                }),
+            ],
+        });
+        expect(md).toContain('handle empty payload ([#1]');
+        expect(md).not.toContain('fix(api):');
+        expect(md).toContain('drop legacy /v1 endpoint ([#2]');
+        expect(md).not.toContain('feat!:');
+    });
+
+    it('falls back to commit subject when the PR title is bare (no text after prefix)', () => {
+        const md = renderChangelogEntry({
+            version: '1.0.1',
+            date: '2026-05-19',
+            prs: [
+                pr({
+                    number: 8,
+                    title: 'fix:',
+                    url: 'u',
+                    commits: [
+                        {
+                            type: 'fix',
+                            scope: null,
+                            subject: 'crash on startup',
+                            body: null,
+                            isBreaking: false,
+                            sha: 'c',
+                        },
+                    ],
+                }),
+            ],
+        });
+        expect(md).toContain('crash on startup ([#8]');
+    });
+
     it('routes breaking PRs into Removed', () => {
         const md = renderChangelogEntry({
             version: '2.0.0',

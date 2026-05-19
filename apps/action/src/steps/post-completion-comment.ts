@@ -27,10 +27,16 @@ export interface CompletionContext {
     /**
      * Set when the release shipped (tag + GitHub release exist) but the
      * follow-up PR couldn't be opened — typically because the org/repo
-     * "Allow GitHub Actions to create PRs" toggle is off. We surface this in
-     * the success comment with the manual-recovery branch name.
+     * "Allow GitHub Actions to create PRs" toggle is off.
      */
     prError?: string;
+    /**
+     * Which phase posted this comment. Defaults to 'propose' to keep
+     * call sites short. Phase A ("propose") posts BEFORE tag/release exist
+     * — the success body explains that merging the PR is what publishes
+     * the release.
+     */
+    phase?: 'propose' | 'release';
 }
 
 /**
@@ -67,37 +73,63 @@ function buildSuccessBody(plan: ReleasePlan, tag: string, ctx: CompletionContext
             'Review the report and approve again without `--dry-run` to ship it.',
         ].join('\n');
     }
+
+    const phase = ctx.phase ?? 'propose';
+
+    if (phase === 'propose') {
+        const lines = [
+            `${APP_DISPLAY_NAME} prepared the release \`${tag}\` 📝`,
+            '',
+        ];
+        if (ctx.prUrl) {
+            lines.push(`- Release PR: ${ctx.prUrl}`);
+        }
+        lines.push('');
+        lines.push(
+            '**Next:** review the PR. When you merge it, Tagline will tag the merge ' +
+                'commit and publish the GitHub Release automatically. ' +
+                'Close the PR to cancel — nothing is tagged or released until merge.',
+        );
+
+        // Same "Ready to share" preview as Phase B, but framed as a preview
+        // since the release hasn't shipped yet.
+        lines.push('');
+        lines.push('---');
+        lines.push('');
+        lines.push('**Preview (will publish on merge):**');
+        lines.push('');
+        lines.push(plan.releaseSummary.rawMarkdown.trimEnd());
+
+        if (!ctx.prUrl && ctx.prError) {
+            const branch = releaseBranchName(plan.nextVersion);
+            const compareUrl = `https://github.com/${plan.repoOwner}/${plan.repoName}/compare/${plan.baseBranch}...${branch}`;
+            lines.push('');
+            lines.push(`⚠️ The release branch was pushed, but I couldn't open the PR: \`${ctx.prError}\``);
+            lines.push('');
+            lines.push(`Open it manually: ${compareUrl}`);
+            lines.push('');
+            lines.push(
+                'To let future releases open this PR automatically, enable ' +
+                    '*Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests"* ' +
+                    '(both at repo and, if applicable, org level).',
+            );
+        }
+        return lines.join('\n');
+    }
+
+    // Legacy 'release' phase — preserved for callers that synthesize a
+    // single end-to-end success comment. Most flows now use the
+    // propose-then-finalize split, where finalize posts directly on the
+    // merged PR.
     const lines = [`${APP_DISPLAY_NAME} released \`${tag}\` 🎉`, ''];
     if (ctx.releaseUrl) lines.push(`- GitHub release: ${ctx.releaseUrl}`);
     if (ctx.prUrl) lines.push(`- Changelog PR: ${ctx.prUrl}`);
-
-    // "Ready to share" block (PLAN_ADDENDUM.md §8). The engineering lead can
-    // copy this directly into Slack, email, or a product changelog tool with
-    // zero editing. Lives BETWEEN the URLs and the optional `prError` block
-    // so the manual-recovery flow remains adjacent to the rest of the error
-    // context when both happen at once.
     lines.push('');
     lines.push('---');
     lines.push('');
     lines.push('**Ready to share:**');
     lines.push('');
     lines.push(plan.releaseSummary.rawMarkdown.trimEnd());
-
-    if (!ctx.prUrl && ctx.prError) {
-        const branch = releaseBranchName(plan.nextVersion);
-        const compareUrl = `https://github.com/${plan.repoOwner}/${plan.repoName}/compare/${plan.baseBranch}...${branch}`;
-        lines.push('');
-        lines.push(`⚠️ The release shipped, but I couldn't open the changelog PR: \`${ctx.prError}\``);
-        lines.push('');
-        lines.push(`Open it manually: ${compareUrl}`);
-        lines.push('');
-        lines.push(
-            'To let future releases open this PR automatically, enable ' +
-                '*Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests"* ' +
-                '(both at repo and, if applicable, org level).',
-        );
-    }
-
     return lines.join('\n');
 }
 

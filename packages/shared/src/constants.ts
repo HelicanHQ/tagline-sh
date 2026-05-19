@@ -92,7 +92,7 @@ export const DEFAULT_CONFIG: RepoConfig = {
  */
 export const AI_DEFAULTS = {
     baseUrl: 'https://openrouter.ai/api/v1',
-    model: 'openai/gpt-4o-mini',
+    model: 'google/gemini-3.1-flash-lite-preview',
 } as const;
 
 /** Workflow file the bot dispatches against in the user's repo. */

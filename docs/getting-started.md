@@ -24,7 +24,12 @@ When the app is installed it opens a welcome issue with a setup checklist.
 
 Copy [`examples/single-repo/.github/workflows/release-agent.yml`](../examples/single-repo/.github/workflows/release-agent.yml) to your repo at the same path. For monorepos, use the [`monorepo` example](../examples/monorepo/.github/workflows/release-agent.yml) — the logic is identical; Tagline detects your monorepo flavor automatically.
 
-This workflow is only invoked via `workflow_dispatch`, triggered by the bot when you `/approve`. It never runs on its own.
+The workflow has **two triggers**, one per release phase:
+
+- `workflow_dispatch` — fires when you `/approve`. Runs **Phase A (propose)**: bumps versions, writes CHANGELOG, opens the release PR. No tag, no GitHub Release.
+- `pull_request: closed` (on `main`/`master`) — fires when you merge the release PR. Runs **Phase B (finalize)**: tags the merge commit and publishes the GitHub Release. A guard on the job's `if:` ensures Phase B only runs for merged `release/*` PRs — closing without merging is a no-op.
+
+Phase A is reversible (close the PR to cancel). Phase B is the publishing step. Nothing ships until you merge.
 
 ### Required workflow permissions
 
@@ -32,9 +37,9 @@ The workflow's `permissions:` block must grant exactly three things — these sc
 
 ```yaml
 permissions:
-    contents: write # commit version bumps, push the release branch + tag, create the GitHub release
-    pull-requests: write # open the changelog PR back to the production branch
-    issues: write # post the completion comment on the originating issue
+    contents: write # commit version bumps, push the release branch (Phase A), create the tag + GitHub release (Phase B)
+    pull-requests: write # open the changelog PR back to the production branch (Phase A); comment on the merged PR (Phase B)
+    issues: write # post the acknowledgement comment on the originating issue
 ```
 
 The example workflow files already include these. If you build your own workflow and see `Resource not accessible by integration` in the Actions log, you're missing one of the three — most commonly `issues: write`.
@@ -76,7 +81,9 @@ When ready, comment:
 /approve --draft    # create as a draft release
 ```
 
-Tagline kicks off the workflow. When it finishes, it posts a completion comment on the same issue with links to the new tag, GitHub release, and changelog PR.
+Tagline kicks off Phase A. The action opens a release PR (no tag, no GitHub Release yet) and the bot acknowledges with the PR link.
+
+**Review the PR.** When you merge it, Phase B fires automatically: the merge commit is tagged, the GitHub Release is published, and a finalize comment with a "Ready to share" block lands on the merged PR. Close the PR to cancel — nothing is tagged or published until merge.
 
 That's it.
 

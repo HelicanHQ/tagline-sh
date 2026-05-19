@@ -19,13 +19,24 @@ Lead comments /approve minor
               ↓
        Bot triggers workflow_dispatch with the release plan
               ↓
-       Action bumps version, writes CHANGELOG.md, tags, releases,
-       opens PR — runs in your CI with your secrets
+   ┌──── Phase A — propose ────────────────────────────────────┐
+   │  Action bumps version, writes CHANGELOG.md, pushes the     │
+   │  release/vX.Y.Z branch, opens a release PR.                │
+   │  NO tag, NO GitHub Release yet. Acknowledgement comment    │
+   │  goes back to the originating issue.                       │
+   └────────────────────────────────────────────────────────────┘
               ↓
-       Action posts completion comment with links
+Lead reviews the PR, merges it (or closes it to cancel)
+              ↓
+   ┌──── Phase B — finalize (on PR merge) ─────────────────────┐
+   │  Action tags the merge commit, publishes the GitHub        │
+   │  Release with the plain-language summary above the         │
+   │  technical changelog, comments "Ready to share" on the     │
+   │  merged PR.                                                │
+   └────────────────────────────────────────────────────────────┘
 ```
 
-The bot **never writes** to your repo. Only the action does, and only inside your own CI with your own `GITHUB_TOKEN`. Your branch protections and audit log stay intact.
+Nothing is tagged or published until the release PR is merged. The bot **never writes** to your repo. Only the action does, and only inside your own CI with your own `GITHUB_TOKEN`. Your branch protections and audit log stay intact.
 
 ## Five-minute install
 
@@ -68,7 +79,7 @@ Two-component split — the bot thinks, the action writes.
 | Package | What it is |
 |---------|------------|
 | `apps/bot` | Probot GitHub App. Stateless. Reads from GitHub on demand. Posts comments. Never writes to user repos. |
-| `apps/action` | Node 20 GitHub Action. Triggered via `workflow_dispatch`. Bumps versions, writes `CHANGELOG.md`, tags, releases, opens PR. |
+| `apps/action` | Node 20 GitHub Action. Runs in two phases: `workflow_dispatch` (propose — bump + CHANGELOG + branch + PR, no tag) and `pull_request: closed` (finalize — tag the merge commit + publish GitHub Release on merge). |
 | `packages/shared` | TypeScript types + zod schemas. The `ReleasePlan` contract between bot and action. |
 
 The action runs **in the user's CI**, with the user's secrets and audit log. The bot only proposes; the action only acts on explicit `/approve`.

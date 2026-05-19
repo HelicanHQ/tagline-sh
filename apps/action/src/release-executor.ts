@@ -7,16 +7,27 @@ import {
 } from '@tagline-sh/shared';
 import { bumpVersion } from '~/app/steps/bump-version';
 import { writeChangelog } from '~/app/steps/write-changelog';
-import { commitAndTag, type GitOpsDeps } from '~/app/steps/git-operations';
-import { createGitHubRelease, type ReleaseOctokit } from '~/app/steps/github-release';
-import { openReleasePR, type OpenPROctokit } from '~/app/steps/open-pr';
+import {
+    commitAndPushBranch,
+    tagMergeCommit,
+    type GitOpsDeps,
+    type TagMergeOctokit,
+} from '~/app/steps/git-operations';
+import {
+    buildReleaseBody,
+    createGitHubReleaseFor,
+    type ReleaseOctokit,
+} from '~/app/steps/github-release';
+import {
+    extractFinalizePlan,
+    openReleasePR,
+    type FinalizePlanPayload,
+    type OpenPROctokit,
+} from '~/app/steps/open-pr';
 import { postCompletionComment, type CommentOctokit } from '~/app/steps/post-completion-comment';
 
-/**
- * The intersection of every Octokit shape the steps need. We pass the same
- * authenticated client into every step that hits the GitHub API.
- */
-export type ExecutorOctokit = ReleaseOctokit & OpenPROctokit & CommentOctokit;
+/** Octokit intersection used across both phases. */
+export type ExecutorOctokit = ReleaseOctokit & OpenPROctokit & CommentOctokit & TagMergeOctokit;
 
 export interface ExecutorDeps {
     octokit: ExecutorOctokit;
@@ -25,39 +36,75 @@ export interface ExecutorDeps {
 }
 
 /**
- * Run a release plan end-to-end against the file system + GitHub.
- *
- * Never throws — failures are captured into `ReleaseResult.error` and a
- * failure comment is posted on the originating issue. The caller (main.ts)
- * marks the workflow as failed via `core.setFailed()` based on the result.
- *
- * Dry-run mode (`plan.isDryRun`) short-circuits steps 5–8: it still bumps
- * versions and writes CHANGELOG.md on the filesystem (so the user can inspect
- * the diff in the workflow run logs), but skips git writes, GitHub release,
- * and PR creation.
+ * Build the finalize payload that ships inside the release PR body. Phase
+ * B parses this back out at merge time and uses it verbatim to create tags
+ * and GitHub Releases — no re-derivation from repo state needed.
  */
-export async function executeRelease(
+function buildFinalizePayload(plan: ReleasePlan): FinalizePlanPayload {
+    const isMonorepo = plan.packages.length > 0;
+    if (!isMonorepo) {
+        const tag = releaseTagName(plan.nextVersion);
+        return {
+            nextVersion: plan.nextVersion,
+            tags: [tag],
+            releaseBodies: [buildReleaseBody(plan)],
+            releaseNames: [tag],
+            draft: plan.isDraft,
+            issueNumber: plan.issueNumber,
+            summaryMarkdown: plan.releaseSummary.rawMarkdown,
+        };
+    }
+    // Monorepo: one tag per package, each release body = repo-level summary
+    // + that package's changelog excerpt. The repo-level summary stays
+    // identical across packages (PLAN_ADDENDUM §9 — summary is repo-level).
+    const tags = plan.packages.map((p) => p.tagName);
+    const releaseBodies = plan.packages.map((p) =>
+        [plan.releaseSummary.rawMarkdown, '', '---', '', p.changelogContent].join('\n'),
+    );
+    const releaseNames = plan.packages.map((p) => p.tagName);
+    return {
+        nextVersion: plan.nextVersion,
+        tags,
+        releaseBodies,
+        releaseNames,
+        draft: plan.isDraft,
+        issueNumber: plan.issueNumber,
+        summaryMarkdown: plan.releaseSummary.rawMarkdown,
+    };
+}
+
+/**
+ * Phase A — propose.
+ *
+ * Bumps versions, writes CHANGELOG.md, commits, pushes the release branch,
+ * opens a PR. Does **NOT** create a tag or GitHub Release. Those happen in
+ * `executeFinalizeRelease` when the PR is merged.
+ *
+ * The release PR body carries a hidden plan marker that Phase B reads to
+ * know exactly what to tag and release without re-inferring from the merge
+ * commit.
+ */
+export async function executeProposeRelease(
     plan: ReleasePlan,
     deps: ExecutorDeps,
 ): Promise<ReleaseResult> {
     const tag = releaseTagName(plan.nextVersion);
     const branch = releaseBranchName(plan.nextVersion);
-    let releaseUrl: string | null = null;
     let prUrl: string | null = null;
 
     try {
-        core.info(`Step 1/8: Bumping versions to ${plan.nextVersion}`);
+        core.info(`Step 1/5: Bumping versions to ${plan.nextVersion}`);
         const bumped = await bumpVersion(plan, deps.workspaceRoot);
         core.info(`  bumped ${bumped.files.length} file(s)`);
 
-        core.info(`Step 2/8: Writing CHANGELOG.md`);
+        core.info(`Step 2/5: Writing CHANGELOG.md`);
         const changelog = await writeChangelog(plan, deps.workspaceRoot);
         core.info(`  wrote ${changelog.files.length} file(s)`);
 
         if (plan.isDryRun) {
-            core.info('Dry run: skipping git/GitHub writes.');
+            core.info('Dry run: skipping git/PR writes.');
             await tryPostCompletion(plan, deps.octokit, {
-                releaseUrl: null,
+                kind: 'propose',
                 prUrl: null,
                 dryRun: true,
             });
@@ -72,64 +119,45 @@ export async function executeRelease(
             };
         }
 
-        core.info(`Step 3/8: Commit + tag on ${branch}`);
-        const git = await commitAndTag(plan, deps.workspaceRoot, deps.git ? { git: deps.git } : {});
-        core.info(`  branch=${git.branch} tag=${git.tag} sha=${git.commitSha}`);
+        core.info(`Step 3/5: Commit + push branch ${branch}`);
+        const git = await commitAndPushBranch(
+            plan,
+            deps.workspaceRoot,
+            deps.git ? { git: deps.git } : {},
+        );
+        core.info(`  branch=${git.branch} sha=${git.commitSha}`);
 
-        core.info(`Step 4/8: Creating GitHub release`);
-        const rel = await createGitHubRelease(plan, deps.octokit);
-        releaseUrl = rel.releaseUrl;
-        core.info(`  ${releaseUrl}`);
+        core.info(`Step 4/5: Opening release PR`);
+        const payload = buildFinalizePayload(plan);
+        const pr = await openReleasePR(plan, deps.octokit, payload);
+        prUrl = pr.prUrl;
+        core.info(`  ${prUrl}`);
 
-        core.info(`Step 5/8: Opening changelog PR`);
-        let prError: string | null = null;
-        try {
-            const pr = await openReleasePR(plan, deps.octokit);
-            prUrl = pr.prUrl;
-            core.info(`  ${prUrl}`);
-        } catch (err) {
-            // The tag + GitHub release are already public at this point. A PR
-            // failure (commonly: org/repo "Allow GitHub Actions to create PRs"
-            // toggle is off) is annoying but doesn't undo the release. Surface
-            // it clearly and let the user open the PR manually.
-            prError = err instanceof Error ? err.message : String(err);
-            core.warning(`Could not open changelog PR: ${prError}`);
-            if (/not permitted/i.test(prError)) {
-                core.warning(
-                    'Enable "Allow GitHub Actions to create and approve pull requests" at ' +
-                        'Settings → Actions → General → Workflow permissions (repo AND org if applicable), ' +
-                        'then open the PR manually from the pushed release branch.',
-                );
-            }
-        }
-
-        core.info(`Step 6/8: Posting completion comment`);
+        core.info(`Step 5/5: Posting acknowledgement comment`);
         await tryPostCompletion(plan, deps.octokit, {
-            releaseUrl,
+            kind: 'propose',
             prUrl,
             dryRun: false,
-            ...(prError ? { prError } : {}),
         });
 
         core.setOutput('version', plan.nextVersion);
         core.setOutput('tag', tag);
-        core.setOutput('release_url', releaseUrl);
         core.setOutput('pr_url', prUrl);
 
         return {
             success: true,
             nextVersion: plan.nextVersion,
             tagName: tag,
-            releaseUrl,
+            releaseUrl: null,
             prUrl,
             error: null,
             isDryRun: false,
         };
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        core.error(`Release failed: ${message}`);
+        core.error(`Release proposal failed: ${message}`);
         await tryPostCompletion(plan, deps.octokit, {
-            releaseUrl,
+            kind: 'propose',
             prUrl,
             dryRun: plan.isDryRun,
             error: message,
@@ -138,7 +166,7 @@ export async function executeRelease(
             success: false,
             nextVersion: plan.nextVersion,
             tagName: tag,
-            releaseUrl,
+            releaseUrl: null,
             prUrl,
             error: message,
             isDryRun: plan.isDryRun,
@@ -146,24 +174,205 @@ export async function executeRelease(
     }
 }
 
+export interface FinalizeInput {
+    repoOwner: string;
+    repoName: string;
+    /** Merge commit SHA — what the tag(s) point at. */
+    mergeSha: string;
+    /** The release PR number — finalize comments back on it. */
+    prNumber: number;
+    /** Raw PR body containing the embedded plan marker. */
+    prBody: string | null;
+    /** Fallback: head ref of the merged PR (used when the marker is missing). */
+    headRef: string;
+}
+
 /**
- * Wrap `postCompletionComment` so a failure here (missing `issues: write`
- * permission, transient API hiccup) doesn't tank an otherwise-successful
- * release. Logs a warning and returns. The release-result decision is made
- * upstream based on whether the actual release steps succeeded.
+ * Phase B — finalize.
+ *
+ * Triggered by `pull_request: closed.merged` on a `release/*` branch.
+ * Parses the plan marker from the merged PR body, then creates the tag(s)
+ * at the merge SHA and publishes a GitHub Release per tag. Comments back
+ * on the merged PR with the release URLs.
  */
+export async function executeFinalizeRelease(
+    input: FinalizeInput,
+    deps: ExecutorDeps,
+): Promise<ReleaseResult> {
+    const payload = extractFinalizePlan(input.prBody);
+
+    if (!payload) {
+        const message =
+            'Tagline could not find the embedded plan marker in the release PR body. ' +
+            'The release PR may have been edited or opened by hand. Skipping tag + release.';
+        core.warning(message);
+        return {
+            success: false,
+            nextVersion: '0.0.0',
+            tagName: '',
+            releaseUrl: null,
+            prUrl: null,
+            error: message,
+            isDryRun: false,
+        };
+    }
+
+    try {
+        core.info(`Step 1/3: Tagging merge commit ${input.mergeSha} with ${payload.tags.length} tag(s)`);
+        const tagged = await tagMergeCommit(
+            {
+                repoOwner: input.repoOwner,
+                repoName: input.repoName,
+                sha: input.mergeSha,
+                tags: payload.tags,
+            },
+            deps.octokit,
+        );
+        core.info(`  created: [${tagged.created.join(', ')}] skipped: [${tagged.skipped.join(', ')}]`);
+
+        core.info(`Step 2/3: Creating ${payload.tags.length} GitHub Release(s)`);
+        const releaseUrls: string[] = [];
+        for (let i = 0; i < payload.tags.length; i += 1) {
+            const tag = payload.tags[i]!;
+            const body = payload.releaseBodies[i] ?? '';
+            const name = payload.releaseNames[i] ?? tag;
+            try {
+                const rel = await createGitHubReleaseFor(
+                    {
+                        repoOwner: input.repoOwner,
+                        repoName: input.repoName,
+                        tag,
+                        name,
+                        body,
+                        draft: payload.draft,
+                    },
+                    deps.octokit,
+                );
+                releaseUrls.push(rel.releaseUrl);
+                core.info(`  ${tag} → ${rel.releaseUrl}`);
+            } catch (err) {
+                const message = err instanceof Error ? err.message : String(err);
+                if (/already_exists|already exists/i.test(message)) {
+                    core.info(`  ${tag} → release already exists, skipping`);
+                    continue;
+                }
+                throw err;
+            }
+        }
+
+        core.info(`Step 3/3: Commenting on PR #${input.prNumber}`);
+        await tryPostFinalizeComment({
+            octokit: deps.octokit,
+            repoOwner: input.repoOwner,
+            repoName: input.repoName,
+            prNumber: input.prNumber,
+            tags: payload.tags,
+            releaseUrls,
+            summaryMarkdown: payload.summaryMarkdown,
+        });
+
+        const primaryTag = payload.tags[0] ?? releaseTagName(payload.nextVersion);
+        const primaryUrl = releaseUrls[0] ?? null;
+
+        core.setOutput('version', payload.nextVersion);
+        core.setOutput('tag', primaryTag);
+        core.setOutput('release_url', primaryUrl);
+
+        return {
+            success: true,
+            nextVersion: payload.nextVersion,
+            tagName: primaryTag,
+            releaseUrl: primaryUrl,
+            prUrl: null,
+            error: null,
+            isDryRun: false,
+        };
+    } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        core.error(`Release finalize failed: ${message}`);
+        return {
+            success: false,
+            nextVersion: payload.nextVersion,
+            tagName: payload.tags[0] ?? '',
+            releaseUrl: null,
+            prUrl: null,
+            error: message,
+            isDryRun: false,
+        };
+    }
+}
+
+/**
+ * @deprecated Use `executeProposeRelease` directly. Kept for tests still
+ * importing the old name; behavior is now propose-only (no tag, no release
+ * during this phase — those move to `executeFinalizeRelease`).
+ */
+export const executeRelease = executeProposeRelease;
+
+type ProposeCompletionContext = {
+    kind: 'propose';
+    prUrl: string | null;
+    dryRun: boolean;
+    error?: string;
+};
+
 async function tryPostCompletion(
-    plan: Parameters<typeof postCompletionComment>[0],
-    octokit: Parameters<typeof postCompletionComment>[1],
-    ctx: Parameters<typeof postCompletionComment>[2],
+    plan: ReleasePlan,
+    octokit: ExecutorOctokit,
+    ctx: ProposeCompletionContext,
 ): Promise<void> {
     try {
-        await postCompletionComment(plan, octokit, ctx);
+        await postCompletionComment(plan, octokit, {
+            releaseUrl: null,
+            prUrl: ctx.prUrl,
+            dryRun: ctx.dryRun,
+            ...(ctx.error ? { error: ctx.error } : {}),
+            phase: 'propose',
+        });
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         core.warning(
             `Could not post completion comment (release itself was not affected): ${message}. ` +
                 'If you see "Resource not accessible by integration", add `issues: write` to your workflow permissions.',
         );
+    }
+}
+
+async function tryPostFinalizeComment(args: {
+    octokit: ExecutorOctokit;
+    repoOwner: string;
+    repoName: string;
+    prNumber: number;
+    tags: string[];
+    releaseUrls: string[];
+    summaryMarkdown: string;
+}): Promise<void> {
+    const lines: string[] = [];
+    if (args.tags.length === 1) {
+        lines.push(`Released \`${args.tags[0]}\` 🎉`);
+    } else {
+        lines.push(`Released ${args.tags.length} packages 🎉`);
+    }
+    lines.push('');
+    for (let i = 0; i < args.tags.length; i += 1) {
+        const url = args.releaseUrls[i];
+        if (url) lines.push(`- \`${args.tags[i]}\` → ${url}`);
+    }
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+    lines.push('**Ready to share:**');
+    lines.push('');
+    lines.push(args.summaryMarkdown.trimEnd());
+    try {
+        await args.octokit.rest.issues.createComment({
+            owner: args.repoOwner,
+            repo: args.repoName,
+            issue_number: args.prNumber,
+            body: lines.join('\n'),
+        });
+    } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        core.warning(`Could not post finalize comment: ${message}.`);
     }
 }

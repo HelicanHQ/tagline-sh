@@ -278,11 +278,30 @@ For each of these, comment the indicated `/approve …` and confirm the bot's re
 - Try `/release-report` from a GitHub account that has **read-only** access to the test repo.
 - Expect the bot to reply asking the actor to request write access; no AI call, no workflow dispatch.
 
-### 2.10 Idempotency safeguard
+### 2.10 Idempotency safeguard (Phase B)
 
-- After a successful release on `v1.5.0`, manually re-dispatch the same workflow run from the GitHub Actions UI with the same `release_plan`.
-- Expect the action to fail with: `Tag v1.5.0 already exists. Has this release already been triggered?`
-- For a monorepo: pre-create just ONE of the per-package tags manually, then trigger a `/approve`. Expect the action to refuse the WHOLE release with `Tags already exist: @acme/api@1.1.0`.
+- After a successful release on `v1.5.0`, manually re-dispatch the Phase B workflow run from the GitHub Actions UI for the same merged PR (Re-run jobs).
+- Expect Phase B to log `Reference already exists` for the tag and `release already exists` for the GitHub Release, and skip both. The finalize result is still `success` — re-runs are idempotent, not destructive.
+- For a monorepo with partial state (e.g. someone manually created `@acme/api@1.1.0` before merge but not `@acme/ui@0.5.1`): Phase B creates the missing tag(s) and skips the existing one(s) without aborting the rest.
+
+### 2.11 Two-phase contract: cancel by closing
+
+- Run `/approve` on the test repo to open a release PR.
+- Verify: NO tag exists yet (`gh api repos/<owner>/<repo>/tags`), NO GitHub Release exists yet (`gh release list`).
+- **Close** the release PR (don't merge).
+- Verify: still no tag, no release. The workflow either doesn't trigger (closed-without-merge filter) or triggers and logs "PR was closed without merging — skipping finalize."
+- Run `/approve` again — should be able to start a fresh release proposal without conflict.
+
+### 2.12 Two-phase contract: tag lands on merge commit
+
+- Run `/approve`, then merge the release PR (squash or merge commit).
+- After Phase B completes, confirm the tag is on the **merge commit on `main`**, not on the orphan release branch:
+  ```bash
+  git fetch --tags
+  git branch -a --contains $(git rev-list -n 1 v1.5.0)
+  # Should include main/origin/main — proves the tag lives on the production branch.
+  ```
+- This is the key behavioral difference vs. the old single-phase architecture, where the tag was on the release branch's commit and would orphan if the PR were ever closed without merging.
 
 ---
 

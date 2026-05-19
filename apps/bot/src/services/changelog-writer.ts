@@ -29,12 +29,38 @@ function isoDate(d: Date): string {
     return `${yyyy}-${mm}-${dd}`;
 }
 
-/** Pick the most informative subject for a PR: first feat/fix subject if any, else the PR title. */
-function bestSubject(pr: ParsedPR): string {
+// Strips a leading conventional-commit prefix from a string:
+//   `feat: foo`             → `foo`
+//   `fix(scope): bar`       → `bar`
+//   `feat!: drop /v1`       → `drop /v1`
+//   `chore(deps)!: bump x`  → `bump x`
+const CC_PREFIX_RE = /^[a-zA-Z]+(?:\([^)]*\))?!?:\s*/;
+
+/**
+ * Pick the bullet text for a PR.
+ *
+ * Authority order:
+ *   1. The PR title with any conventional-commit prefix stripped. The PR
+ *      title is the squash-merge artifact that goes through human review;
+ *      it's the most authoritative summary of the change.
+ *   2. The first feat/fix commit subject — fallback only when the PR title
+ *      is empty or just a bare prefix.
+ *   3. The first commit subject as last resort.
+ *
+ * Why PR title beats commit subjects: commit subjects on a long-lived
+ * branch (e.g. `development → main`) may be intermediate WIP messages from
+ * unrelated feature streams that ride along in the same merge. Picking the
+ * first `feat`/`fix` commit silently misattributes the headline change in
+ * those cases — exactly the bug that produced
+ * "feat: tagline sh release bot implemented" in the changelog for a PR
+ * actually titled "feat: improved designs".
+ */
+function bulletSubject(pr: ParsedPR): string {
+    const stripped = pr.title.trim().replace(CC_PREFIX_RE, '').trim();
+    if (stripped) return stripped;
     const interesting = pr.commits.find((c) => c.type === 'feat' || c.type === 'fix');
     if (interesting) return interesting.subject;
-    const first = pr.commits[0];
-    return first?.subject ?? pr.title;
+    return pr.commits[0]?.subject ?? pr.title;
 }
 
 function ticketSuffix(pr: ParsedPR): string {
@@ -43,7 +69,7 @@ function ticketSuffix(pr: ParsedPR): string {
 }
 
 function bulletForPR(pr: ParsedPR): string {
-    const subject = bestSubject(pr);
+    const subject = bulletSubject(pr);
     return `- ${subject} ([#${pr.number}](${pr.url}))${ticketSuffix(pr)}`;
 }
 
