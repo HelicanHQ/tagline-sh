@@ -1,7 +1,7 @@
 import { parse as parseYaml } from 'yaml';
 import picomatch from 'picomatch';
 import type { MonorepoInfo, MonorepoType, PackageInfo, ParsedPR } from '@tagline-sh/shared';
-import type { GitHubReader, RepoRef } from './github-reader.js';
+import type { GitHubReader, RepoRef } from '~/app/services/github-reader';
 
 // Detection priority per PLAN.md §12 — first match wins.
 const DETECTORS: ReadonlyArray<{
@@ -88,7 +88,8 @@ async function detectFlavor(
     const globs = normalizeWorkspaces(parsed);
     if (globs.length === 0) return null;
 
-    const isYarn = typeof parsed?.packageManager === 'string' && parsed.packageManager.startsWith('yarn');
+    const isYarn =
+        typeof parsed?.packageManager === 'string' && parsed.packageManager.startsWith('yarn');
     return { type: isYarn ? 'yarn-workspaces' : 'npm-workspaces', globs };
 }
 
@@ -206,9 +207,7 @@ export function attributePRsToPackages(
     const updatedPackages = info.packages.map((pkg) => {
         const prefix = pkg.path === '.' ? '' : `${pkg.path}/`;
         const affected = prsWithFiles
-            .filter(({ files }) =>
-                files.some((f) => (prefix === '' ? true : f.startsWith(prefix))),
-            )
+            .filter(({ files }) => files.some((f) => (prefix === '' ? true : f.startsWith(prefix))))
             .map(({ pr }) => pr);
         return { ...pkg, affectedPRs: affected };
     });

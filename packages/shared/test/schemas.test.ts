@@ -33,6 +33,16 @@ const goodPlan: ReleasePlan = {
         },
     ],
     changelogContent: '## [1.5.0] - 2026-05-18\n\n### Added\n- PKCE',
+    releaseSummary: {
+        version: '1.5.0',
+        date: 'May 18, 2026',
+        headline: 'You can now log in with OAuth2 PKCE.',
+        body: 'This release adds OAuth2 PKCE support so users can sign in more securely.',
+        highlights: ['Sign in with OAuth2 PKCE'],
+        rawMarkdown:
+            "## What's new in v1.5.0 · May 18, 2026\n\nYou can now log in with OAuth2 PKCE.\n\nThis release adds OAuth2 PKCE support so users can sign in more securely.\n\n- Sign in with OAuth2 PKCE",
+    },
+    packages: [],
     isMonorepo: false,
     monorepoInfo: null,
     isDraft: false,
@@ -70,6 +80,30 @@ describe('ReleasePlanSchema', () => {
         const bad = {
             ...goodPlan,
             prs: [{ ...goodPlan.prs[0], url: 'not-a-url' }],
+        };
+        expect(() => ReleasePlanSchema.parse(bad)).toThrow();
+    });
+
+    it('rejects a plan missing releaseSummary', () => {
+        const { releaseSummary: _omit, ...bad } = goodPlan;
+        expect(() => ReleasePlanSchema.parse(bad)).toThrow();
+    });
+
+    it('rejects a releaseSummary with zero highlights', () => {
+        const bad = {
+            ...goodPlan,
+            releaseSummary: { ...goodPlan.releaseSummary, highlights: [] },
+        };
+        expect(() => ReleasePlanSchema.parse(bad)).toThrow();
+    });
+
+    it('rejects a releaseSummary with more than 5 highlights', () => {
+        const bad = {
+            ...goodPlan,
+            releaseSummary: {
+                ...goodPlan.releaseSummary,
+                highlights: ['a', 'b', 'c', 'd', 'e', 'f'],
+            },
         };
         expect(() => ReleasePlanSchema.parse(bad)).toThrow();
     });

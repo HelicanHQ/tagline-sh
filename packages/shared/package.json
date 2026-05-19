@@ -1,27 +1,29 @@
 {
-  "name": "@tagline-sh/shared",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+    "name": "@tagline-sh/shared",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "main": "./dist/index.cjs",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js",
+            "require": "./dist/index.cjs"
+        }
+    },
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "tsup",
+        "typecheck": "tsc --noEmit",
+        "test": "vitest run --passWithNoTests",
+        "test:watch": "vitest",
+        "clean": "rm -rf dist"
+    },
+    "dependencies": {
+        "zod": "^3.23.8"
     }
-  },
-  "files": ["dist"],
-  "scripts": {
-    "build": "tsup",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests",
-    "test:watch": "vitest",
-    "clean": "rm -rf dist"
-  },
-  "dependencies": {
-    "zod": "^3.23.8"
-  }
 }

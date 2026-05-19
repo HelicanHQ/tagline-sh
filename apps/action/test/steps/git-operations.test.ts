@@ -57,4 +57,102 @@ describe('commitAndTag', () => {
         await commitAndTag(makePlan(), '/tmp/repo', { git, skipPush: true });
         expect(calls.push).not.toHaveBeenCalled();
     });
+
+    it('pushes one annotated tag PER package for monorepo plans (M3)', async () => {
+        const { git, calls } = fakeGit();
+        const plan = makePlan({
+            isMonorepo: true,
+            nextVersion: 'event-2026-05-19',
+            packages: [
+                {
+                    name: '@acme/api',
+                    path: 'packages/api',
+                    packageJsonPath: 'packages/api/package.json',
+                    changelogPath: 'packages/api/CHANGELOG.md',
+                    currentVersion: '1.0.0',
+                    nextVersion: '1.1.0',
+                    bumpType: 'minor',
+                    prs: [],
+                    changelogContent: '## [1.1.0]\n',
+                    tagName: '@acme/api@1.1.0',
+                },
+                {
+                    name: '@acme/ui',
+                    path: 'packages/ui',
+                    packageJsonPath: 'packages/ui/package.json',
+                    changelogPath: 'packages/ui/CHANGELOG.md',
+                    currentVersion: '0.5.0',
+                    nextVersion: '0.5.1',
+                    bumpType: 'patch',
+                    prs: [],
+                    changelogContent: '## [0.5.1]\n',
+                    tagName: '@acme/ui@0.5.1',
+                },
+            ],
+        });
+
+        const result = await commitAndTag(plan, '/tmp/repo', { git });
+
+        // Branch uses the event id (release/vevent-…).
+        expect(result.branch).toBe('release/vevent-2026-05-19');
+        // Both tags surface on the result.
+        expect(result.tags).toEqual(['@acme/api@1.1.0', '@acme/ui@0.5.1']);
+        expect(result.tag).toContain('@acme/api@1.1.0');
+        expect(result.tag).toContain('@acme/ui@0.5.1');
+
+        // One annotated tag call per package.
+        expect(calls.addAnnotatedTag).toHaveBeenCalledTimes(2);
+        expect(calls.addAnnotatedTag).toHaveBeenCalledWith(
+            '@acme/api@1.1.0',
+            'Release @acme/api@1.1.0',
+        );
+        expect(calls.addAnnotatedTag).toHaveBeenCalledWith(
+            '@acme/ui@0.5.1',
+            'Release @acme/ui@0.5.1',
+        );
+
+        // 1 branch push + 2 tag pushes = 3 push calls.
+        expect(calls.push).toHaveBeenCalledTimes(3);
+    });
+
+    it('refuses the entire monorepo release when ANY package tag already exists', async () => {
+        // Pre-existing `@acme/api@1.1.0` should abort the release before any
+        // checkout/commit happens — partial monorepo state is worse than
+        // failing fast.
+        const { git } = fakeGit(['@acme/api@1.1.0']);
+        const plan = makePlan({
+            isMonorepo: true,
+            nextVersion: 'event-2026-05-19',
+            packages: [
+                {
+                    name: '@acme/api',
+                    path: 'packages/api',
+                    packageJsonPath: 'packages/api/package.json',
+                    changelogPath: 'packages/api/CHANGELOG.md',
+                    currentVersion: '1.0.0',
+                    nextVersion: '1.1.0',
+                    bumpType: 'minor',
+                    prs: [],
+                    changelogContent: '## [1.1.0]\n',
+                    tagName: '@acme/api@1.1.0',
+                },
+                {
+                    name: '@acme/ui',
+                    path: 'packages/ui',
+                    packageJsonPath: 'packages/ui/package.json',
+                    changelogPath: 'packages/ui/CHANGELOG.md',
+                    currentVersion: '0.5.0',
+                    nextVersion: '0.5.1',
+                    bumpType: 'patch',
+                    prs: [],
+                    changelogContent: '## [0.5.1]\n',
+                    tagName: '@acme/ui@0.5.1',
+                },
+            ],
+        });
+
+        await expect(commitAndTag(plan, '/tmp/repo', { git })).rejects.toThrow(
+            /@acme\/api@1\.1\.0/,
+        );
+    });
 });

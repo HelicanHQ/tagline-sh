@@ -1,5 +1,5 @@
-import type { BumpType } from './types.js';
-import { BUMP_PRIORITY } from './constants.js';
+import type { BumpType, ReleaseSummary } from '~/app/types';
+import { BUMP_PRIORITY } from '~/app/constants';
 
 /**
  * Extract ticket references from text.
@@ -69,6 +69,23 @@ export function releaseTagName(version: string): string {
     return version.startsWith('v') ? version : `v${version}`;
 }
 
+/**
+ * Per-package tag name (M3 — monorepo per-package versioning), following
+ * Changesets convention:
+ *
+ *   - Scoped:   `@acme/api` + `1.5.0` → `@acme/api@1.5.0`
+ *   - Unscoped: `api`       + `1.5.0` → `api@1.5.0`
+ *
+ * Leading `v` on the version is stripped first so callers can pass either
+ * `1.5.0` or `v1.5.0` and get the same canonical output. Recognizable to
+ * anyone who's used Changesets / Lerna — staying with the convention earns
+ * familiarity for free.
+ */
+export function packageTagName(packageName: string, version: string): string {
+    const stripped = version.startsWith('v') ? version.slice(1) : version;
+    return `${packageName}@${stripped}`;
+}
+
 /** Returns the higher-impact of two bumps. `major > minor > patch > none`. */
 export function maxBump(a: BumpType, b: BumpType): BumpType {
     return BUMP_PRIORITY[a] >= BUMP_PRIORITY[b] ? a : b;
@@ -90,4 +107,75 @@ export function excerpt(text: string | null | undefined, maxLen = 500): string |
     const slice = trimmed.slice(0, maxLen);
     const lastSpace = slice.lastIndexOf(' ');
     return (lastSpace > maxLen * 0.6 ? slice.slice(0, lastSpace) : slice) + '…';
+}
+
+/**
+ * Format a `ReleaseSummary` as Markdown ready to paste into Slack, email,
+ * Beamer, or any external channel. This is the canonical `rawMarkdown` shape
+ * used by both apps (bot for the report-comment preview, action for the GitHub
+ * release body and "Ready to share" block in the completion comment) — keeping
+ * the renderer in `packages/shared` ensures bot and action produce byte-equal
+ * output for the same summary.
+ *
+ * Output convention (PLAN_ADDENDUM.md §5):
+ *
+ *     ## What's new in v1.5.0 · May 18, 2026
+ *
+ *     {headline}
+ *
+ *     {body}
+ *
+ *     - {highlight 1}
+ *     - {highlight 2}
+ */
+export function buildSummaryMarkdown(summary: ReleaseSummary): string {
+    const version = summary.version.startsWith('v') ? summary.version : `v${summary.version}`;
+    return [
+        `## What's new in ${version} · ${summary.date}`,
+        '',
+        summary.headline,
+        '',
+        summary.body,
+        '',
+        summary.highlights.map((h) => `- ${h}`).join('\n'),
+    ].join('\n');
+}
+
+/**
+ * Format a `Date` as `"May 18, 2026"` in UTC, matching the convention used by
+ * `ReleaseSummary.date`. UTC for bot/action parity — both should produce the
+ * same `date` string for the same instant regardless of where they run.
+ */
+export function formatSummaryDate(d: Date): string {
+    return d.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        timeZone: 'UTC',
+    });
+}
+
+/**
+ * Re-stamp a previewed `ReleaseSummary` with the actual release version + now.
+ *
+ * Used when `/approve` is issued: the report comment may have previewed
+ * `v1.5.0` on Monday, but the user runs `/approve major` on Thursday so the
+ * actual release is `v2.0.0` and the date is Thursday. The AI's prose
+ * (`headline`, `body`, `highlights`) is what the user approved — keep that —
+ * but `version`, `date`, and the derived `rawMarkdown` must reflect ground
+ * truth at release time.
+ */
+export function restampSummary(
+    summary: ReleaseSummary,
+    version: string,
+    now: Date,
+): ReleaseSummary {
+    const versionLabel = version.startsWith('v') ? version.slice(1) : version;
+    const intermediate: ReleaseSummary = {
+        ...summary,
+        version: versionLabel,
+        date: formatSummaryDate(now),
+        rawMarkdown: '',
+    };
+    return { ...intermediate, rawMarkdown: buildSummaryMarkdown(intermediate) };
 }

@@ -9,9 +9,9 @@ import {
     type VersioningConfig,
     type VersioningScheme,
 } from '@tagline-sh/shared';
-import type { GitHubReader, RepoRef } from './github-reader.js';
+import type { GitHubReader, RepoRef } from '~/app/services/github-reader';
 
-const CONFIG_FILE = '.release-agent.md';
+const CONFIG_FILE = process.env.CONFIG_FILE ?? '.release-agent.md';
 
 // Section names we parse deterministically. Everything else goes into
 // `customContext` / `releaseNotesStyle` and is forwarded to the AI prompt.
@@ -20,11 +20,7 @@ const PRERELEASE_HEADING = /^pre[- ]?release tags?$/i;
 const NOTES_HEADING = /^release notes? style$/i;
 const VERSIONING_HEADING = /^versioning$/i;
 
-const VALID_SCHEMES: ReadonlySet<VersioningScheme> = new Set([
-    'semver',
-    'calver',
-    'incremental',
-]);
+const VALID_SCHEMES: ReadonlySet<VersioningScheme> = new Set(['semver', 'calver', 'incremental']);
 
 interface ParsedSections {
     branches: Record<string, string>;
@@ -54,8 +50,7 @@ export async function readRepoConfig(
         branches: {
             production: sections.branches['production'] ?? DEFAULT_CONFIG.branches.production,
             staging: sections.branches['staging'] ?? DEFAULT_CONFIG.branches.staging,
-            development:
-                sections.branches['development'] ?? DEFAULT_CONFIG.branches.development,
+            development: sections.branches['development'] ?? DEFAULT_CONFIG.branches.development,
         },
         preReleaseSuffix: {
             staging:
@@ -137,7 +132,9 @@ function parseSections(markdown: string): ParsedSections {
             notesStyleParts.push(stringifyNodes(markdown, currentBody));
         } else {
             // Anything else is passed through verbatim with its heading.
-            customContextParts.push(`## ${currentHeading}\n\n${stringifyNodes(markdown, currentBody)}`);
+            customContextParts.push(
+                `## ${currentHeading}\n\n${stringifyNodes(markdown, currentBody)}`,
+            );
         }
     };
 

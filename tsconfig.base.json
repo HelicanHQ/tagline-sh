@@ -1,30 +1,36 @@
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "lib": ["ES2023"],
-    "strict": true,
-    "noImplicitAny": true,
-    "noUncheckedIndexedAccess": true,
-    "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": true,
-    "noImplicitOverride": true,
-    "exactOptionalPropertyTypes": false,
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "verbatimModuleSyntax": false,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "baseUrl": ".",
-    "paths": {
-      "@tagline-sh/shared": ["./packages/shared/src/index.ts"],
-      "@tagline-sh/shared/*": ["./packages/shared/src/*"]
-    }
-  },
-  "exclude": ["**/node_modules", "**/dist"]
+    "compilerOptions": {
+        "target": "ES2022",
+        "module": "ESNext",
+        "moduleResolution": "Bundler",
+        "lib": ["ES2023"],
+        "strict": true,
+        "noImplicitAny": true,
+        "noUncheckedIndexedAccess": true,
+        "noImplicitReturns": true,
+        "noFallthroughCasesInSwitch": true,
+        "noImplicitOverride": true,
+        "exactOptionalPropertyTypes": false,
+        "esModuleInterop": true,
+        "forceConsistentCasingInFileNames": true,
+        "skipLibCheck": true,
+        "resolveJsonModule": true,
+        "isolatedModules": true,
+        "verbatimModuleSyntax": false,
+        "declaration": true,
+        "declarationMap": true,
+        "sourceMap": true,
+        // TS 6.0 deprecated `baseUrl`. We never set it explicitly, but
+        // `rollup-plugin-dts` (used by tsup's `dts: true` step) synthesizes
+        // a `baseUrl` internally so the TS resolver can walk `paths`. That
+        // synthesis trips the deprecation error in TS 6.x. Silencing it
+        // here keeps `paths`-driven aliases working through the DTS bundle.
+        // Drop this once tsup / rollup-plugin-dts stop synthesizing baseUrl.
+        "ignoreDeprecations": "6.0",
+        "paths": {
+            "@tagline-sh/shared": ["./packages/shared/src/index.ts"],
+            "@tagline-sh/shared/*": ["./packages/shared/src/*"]
+        }
+    },
+    "exclude": ["**/node_modules", "**/dist"]
 }

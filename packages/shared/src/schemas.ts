@@ -99,6 +99,34 @@ export const RepoConfigSchema = z.object({
     rawContent: z.string(),
 });
 
+/**
+ * Plain-language release notes carried alongside the technical changelog.
+ * Length bounds on `highlights` (1–5) live HERE, not on the TypeScript type —
+ * TS can't model array-length cleanly, but zod validates at the action's
+ * trust boundary which is the load-bearing place anyway.
+ */
+export const ReleaseSummarySchema = z.object({
+    version: z.string().min(1),
+    date: z.string().min(1),
+    headline: z.string().min(1),
+    body: z.string().min(1),
+    highlights: z.array(z.string().min(1)).min(1).max(5),
+    rawMarkdown: z.string().min(1),
+});
+
+export const PackageReleasePlanSchema = z.object({
+    name: z.string().min(1),
+    path: z.string().min(1),
+    packageJsonPath: z.string().min(1),
+    changelogPath: z.string().min(1),
+    currentVersion: z.string().min(1),
+    nextVersion: z.string().min(1),
+    bumpType: BumpTypeSchema,
+    prs: z.array(ParsedPRSchema),
+    changelogContent: z.string(),
+    tagName: z.string().min(1),
+});
+
 export const ReleasePlanSchema = z.object({
     repoOwner: z.string().min(1),
     repoName: z.string().min(1),
@@ -109,8 +137,14 @@ export const ReleasePlanSchema = z.object({
     lastTag: z.string().nullable(),
     prs: z.array(ParsedPRSchema),
     changelogContent: z.string(),
+    // Required, not optional — the bot ALWAYS produces a summary (AI or
+    // deterministic fallback). Making this nullable would let stale bot
+    // builds slip a missing-summary plan past the action boundary unnoticed.
+    releaseSummary: ReleaseSummarySchema,
     isMonorepo: z.boolean(),
     monorepoInfo: MonorepoInfoSchema.nullable(),
+    // Per-package plans (M3). Empty array for single-repo.
+    packages: z.array(PackageReleasePlanSchema),
     isDraft: z.boolean(),
     isDryRun: z.boolean(),
     issueNumber: z.number().int().nonnegative(),

@@ -77,39 +77,81 @@ describe('bumpVersion — monorepo', () => {
         await fs.rm(dir, { recursive: true, force: true });
     });
 
-    it('bumps every workspace package', async () => {
+    it('bumps each package to its OWN nextVersion (M3 — no longer all the same)', async () => {
         const plan = makePlan({
             isMonorepo: true,
-            nextVersion: '2.0.0',
-            monorepoInfo: {
-                type: 'pnpm-workspaces',
-                packages: [
-                    {
-                        name: 'api',
-                        path: 'packages/api',
-                        currentVersion: '1.0.0',
-                        packageJsonPath: 'packages/api/package.json',
-                        changelogPath: 'packages/api/CHANGELOG.md',
-                        affectedPRs: [],
-                    },
-                    {
-                        name: 'ui',
-                        path: 'packages/ui',
-                        currentVersion: '0.5.0',
-                        packageJsonPath: 'packages/ui/package.json',
-                        changelogPath: 'packages/ui/CHANGELOG.md',
-                        affectedPRs: [],
-                    },
-                ],
-                rootPackage: null,
-            },
+            nextVersion: 'event-2026-05-19',
+            packages: [
+                {
+                    name: 'api',
+                    path: 'packages/api',
+                    packageJsonPath: 'packages/api/package.json',
+                    changelogPath: 'packages/api/CHANGELOG.md',
+                    currentVersion: '1.0.0',
+                    nextVersion: '1.1.0',
+                    bumpType: 'minor',
+                    prs: [],
+                    changelogContent: '## [1.1.0]\n',
+                    tagName: 'api@1.1.0',
+                },
+                {
+                    name: 'ui',
+                    path: 'packages/ui',
+                    packageJsonPath: 'packages/ui/package.json',
+                    changelogPath: 'packages/ui/CHANGELOG.md',
+                    currentVersion: '0.5.0',
+                    nextVersion: '0.5.1',
+                    bumpType: 'patch',
+                    prs: [],
+                    changelogContent: '## [0.5.1]\n',
+                    tagName: 'ui@0.5.1',
+                },
+            ],
         });
         const result = await bumpVersion(plan, dir);
         expect(result.files).toEqual([
             'packages/api/package.json',
             'packages/ui/package.json',
         ]);
-        expect((await readJson(path.join(dir, 'packages/api/package.json'))).version).toBe('2.0.0');
-        expect((await readJson(path.join(dir, 'packages/ui/package.json'))).version).toBe('2.0.0');
+        // Each package gets its own version, not `plan.nextVersion`.
+        expect((await readJson(path.join(dir, 'packages/api/package.json'))).version).toBe(
+            '1.1.0',
+        );
+        expect((await readJson(path.join(dir, 'packages/ui/package.json'))).version).toBe(
+            '0.5.1',
+        );
+    });
+
+    it('skips packages not in plan.packages (independent release cadence)', async () => {
+        // `db` is in the workspace but not in plan.packages — should be untouched.
+        await fs.mkdir(path.join(dir, 'packages/db'), { recursive: true });
+        await fs.writeFile(
+            path.join(dir, 'packages/db/package.json'),
+            JSON.stringify({ name: 'db', version: '3.0.0' }, null, 2),
+            'utf8',
+        );
+        const plan = makePlan({
+            isMonorepo: true,
+            nextVersion: 'event-2026-05-19',
+            packages: [
+                {
+                    name: 'api',
+                    path: 'packages/api',
+                    packageJsonPath: 'packages/api/package.json',
+                    changelogPath: 'packages/api/CHANGELOG.md',
+                    currentVersion: '1.0.0',
+                    nextVersion: '1.1.0',
+                    bumpType: 'minor',
+                    prs: [],
+                    changelogContent: '## [1.1.0]\n',
+                    tagName: 'api@1.1.0',
+                },
+            ],
+        });
+        await bumpVersion(plan, dir);
+        // `db` should still be at 3.0.0
+        expect((await readJson(path.join(dir, 'packages/db/package.json'))).version).toBe(
+            '3.0.0',
+        );
     });
 });

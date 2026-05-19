@@ -84,8 +84,18 @@ const sampleReport: ReleaseReport = {
     reasoning: 'Two substantial new features (#342) qualify this as a minor release.',
     changelogPreview:
         '## [1.5.0] - 2026-05-18\n\n### Added\n\n- OAuth2 PKCE ([#342](url))\n\n### Fixed\n\n- Token refresh race ([#341](url))\n',
+    summaryPreview: {
+        version: '1.5.0',
+        date: 'May 18, 2026',
+        headline: 'You can now sign in with OAuth2 PKCE.',
+        body: 'This release adds secure OAuth2 PKCE login and fixes a token-refresh race on mobile.',
+        highlights: ['Sign in with OAuth2 PKCE', 'Fixed token refresh race on mobile'],
+        rawMarkdown:
+            "## What's new in v1.5.0 · May 18, 2026\n\nYou can now sign in with OAuth2 PKCE.\n\nThis release adds secure OAuth2 PKCE login and fixes a token-refresh race on mobile.\n\n- Sign in with OAuth2 PKCE\n- Fixed token refresh race on mobile",
+    },
     isMonorepo: false,
     monorepoInfo: null,
+    packages: [],
     versioningScheme: 'semver',
     generatedAt: '2026-05-18T12:00:00Z',
 };
@@ -118,6 +128,15 @@ describe('reportComment', () => {
 
         // Slash-command footer.
         expect(md).toContain('/approve patch');
+
+        // Plain-language summary section (PLAN_ADDENDUM §6) — always rendered.
+        expect(md).toContain('Plain-language summary');
+        expect(md).toContain('You can now sign in with OAuth2 PKCE.');
+        expect(md).toContain('- Sign in with OAuth2 PKCE');
+        // The summary lives ABOVE the slash-command footer, not below.
+        const summaryIdx = md.indexOf('Plain-language summary');
+        const footerIdx = md.indexOf('Reply with a command');
+        expect(summaryIdx).toBeLessThan(footerIdx);
     });
 
     it('omits empty sections', () => {
@@ -143,6 +162,50 @@ describe('reportComment', () => {
         const md = reportComment(firstRelease);
         expect(md).toContain('_first release_');
         expect(md).toContain('`v0.1.0`');
+    });
+
+    it('renders a per-package table for monorepo reports (M3)', () => {
+        const monorepoReport: ReleaseReport = {
+            ...sampleReport,
+            isMonorepo: true,
+            packages: [
+                {
+                    name: '@acme/api',
+                    path: 'packages/api',
+                    packageJsonPath: 'packages/api/package.json',
+                    changelogPath: 'packages/api/CHANGELOG.md',
+                    currentVersion: '1.0.0',
+                    nextVersion: '1.1.0',
+                    bumpType: 'minor',
+                    prs: [sampleReport.prs[0]!],
+                    changelogContent: '## [1.1.0]\n',
+                    tagName: '@acme/api@1.1.0',
+                },
+                {
+                    name: '@acme/ui',
+                    path: 'packages/ui',
+                    packageJsonPath: 'packages/ui/package.json',
+                    changelogPath: 'packages/ui/CHANGELOG.md',
+                    currentVersion: '0.5.0',
+                    nextVersion: '0.5.1',
+                    bumpType: 'patch',
+                    prs: [sampleReport.prs[1]!],
+                    changelogContent: '## [0.5.1]\n',
+                    tagName: '@acme/ui@0.5.1',
+                },
+            ],
+        };
+        const md = reportComment(monorepoReport);
+        expect(md).toContain('| Package |');
+        expect(md).toContain('`@acme/api`');
+        expect(md).toContain('`1.0.0 → 1.1.0`');
+        expect(md).toContain('`@acme/ui`');
+        expect(md).toContain('`0.5.0 → 0.5.1`');
+        // Single-version "Suggested bump" line is suppressed.
+        expect(md).not.toContain('**Suggested bump:**');
+        // Footer advertises per-package grammar.
+        expect(md).toContain('`/approve <name>:<bump>`');
+        expect(md).not.toContain('/approve patch');
     });
 
     it('renders calver recommendation without bump wording', () => {

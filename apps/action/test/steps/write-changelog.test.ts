@@ -37,54 +37,71 @@ describe('writeChangelog', () => {
         expect(idxOld).toBeGreaterThan(idxNew);
     });
 
-    it('writes per-package CHANGELOGs in monorepos, only for affected packages', async () => {
+    it('writes per-package CHANGELOGs with package-specific content (M3)', async () => {
         await fs.mkdir(path.join(dir, 'packages/api'), { recursive: true });
         await fs.mkdir(path.join(dir, 'packages/ui'), { recursive: true });
 
+        // `db` isn't in plan.packages — its CHANGELOG should not be created.
+        await fs.mkdir(path.join(dir, 'packages/db'), { recursive: true });
+
         const plan = makePlan({
             isMonorepo: true,
-            monorepoInfo: {
-                type: 'pnpm-workspaces',
-                packages: [
-                    {
-                        name: 'api',
-                        path: 'packages/api',
-                        currentVersion: '1.0.0',
-                        packageJsonPath: 'packages/api/package.json',
-                        changelogPath: 'packages/api/CHANGELOG.md',
-                        affectedPRs: [
-                            {
-                                number: 7,
-                                title: 'feat(api): X',
-                                url: 'u',
-                                author: 'oct',
-                                mergedAt: 't',
-                                commits: [],
-                                tickets: [],
-                                suggestedBump: 'minor',
-                                bodyExcerpt: null,
-                            },
-                        ],
-                    },
-                    {
-                        name: 'ui',
-                        path: 'packages/ui',
-                        currentVersion: '0.5.0',
-                        packageJsonPath: 'packages/ui/package.json',
-                        changelogPath: 'packages/ui/CHANGELOG.md',
-                        affectedPRs: [],
-                    },
-                ],
-                rootPackage: null,
-            },
+            nextVersion: 'event-2026-05-19',
+            changelogContent:
+                '## [event-2026-05-19] - 2026-05-19\n\nReleased:\n\n- `api@1.1.0`\n- `ui@0.5.1`\n',
+            packages: [
+                {
+                    name: 'api',
+                    path: 'packages/api',
+                    packageJsonPath: 'packages/api/package.json',
+                    changelogPath: 'packages/api/CHANGELOG.md',
+                    currentVersion: '1.0.0',
+                    nextVersion: '1.1.0',
+                    bumpType: 'minor',
+                    prs: [],
+                    changelogContent: '## [1.1.0] - 2026-05-19\n\n### Added\n\n- api feature\n',
+                    tagName: 'api@1.1.0',
+                },
+                {
+                    name: 'ui',
+                    path: 'packages/ui',
+                    packageJsonPath: 'packages/ui/package.json',
+                    changelogPath: 'packages/ui/CHANGELOG.md',
+                    currentVersion: '0.5.0',
+                    nextVersion: '0.5.1',
+                    bumpType: 'patch',
+                    prs: [],
+                    changelogContent: '## [0.5.1] - 2026-05-19\n\n### Fixed\n\n- ui bug\n',
+                    tagName: 'ui@0.5.1',
+                },
+            ],
         });
 
         const result = await writeChangelog(plan, dir);
         expect(result.files).toContain('packages/api/CHANGELOG.md');
-        expect(result.files).not.toContain('packages/ui/CHANGELOG.md');
+        expect(result.files).toContain('packages/ui/CHANGELOG.md');
+        // db was never in plan.packages → its CHANGELOG isn't touched.
+        expect(result.files).not.toContain('packages/db/CHANGELOG.md');
         expect(result.files).toContain('CHANGELOG.md');
 
-        const apiClog = await fs.readFile(path.join(dir, 'packages/api/CHANGELOG.md'), 'utf8');
-        expect(apiClog).toContain('## [1.5.0]');
+        // Each per-package CHANGELOG gets ITS OWN content, not the aggregate.
+        const apiClog = await fs.readFile(
+            path.join(dir, 'packages/api/CHANGELOG.md'),
+            'utf8',
+        );
+        expect(apiClog).toContain('## [1.1.0]');
+        expect(apiClog).toContain('api feature');
+        expect(apiClog).not.toContain('ui bug');
+
+        const uiClog = await fs.readFile(path.join(dir, 'packages/ui/CHANGELOG.md'), 'utf8');
+        expect(uiClog).toContain('## [0.5.1]');
+        expect(uiClog).toContain('ui bug');
+        expect(uiClog).not.toContain('api feature');
+
+        // Root CHANGELOG carries the release-event aggregator.
+        const rootClog = await fs.readFile(path.join(dir, 'CHANGELOG.md'), 'utf8');
+        expect(rootClog).toContain('event-2026-05-19');
+        expect(rootClog).toContain('api@1.1.0');
+        expect(rootClog).toContain('ui@0.5.1');
     });
 });

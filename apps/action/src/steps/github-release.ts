@@ -40,10 +40,24 @@ export async function createGitHubRelease(
         repo: plan.repoName,
         tag_name: tag,
         name: tag,
-        body: plan.changelogContent,
+        body: buildReleaseBody(plan),
         draft: plan.isDraft,
         prerelease: isPrerelease,
     });
 
     return { releaseUrl: res.data.html_url };
+}
+
+/**
+ * Compose the GitHub release body: plain-language summary first (PLAN_ADDENDUM
+ * §7), then a horizontal-rule separator, then the technical changelog.
+ *
+ * Rationale: anyone browsing the GitHub Releases page in a non-engineering
+ * role sees the readable summary above the fold; developers scrolling for
+ * detail get the conventional-commit changelog below. One artifact, two
+ * audiences — see `memory/reddit_signal_2026_05.md` for the user-research
+ * trail.
+ */
+function buildReleaseBody(plan: ReleasePlan): string {
+    return [plan.releaseSummary.rawMarkdown, '', '---', '', plan.changelogContent].join('\n');
 }

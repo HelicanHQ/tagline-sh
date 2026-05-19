@@ -1,11 +1,16 @@
 import * as core from '@actions/core';
-import { releaseBranchName, releaseTagName, type ReleasePlan, type ReleaseResult } from '@tagline-sh/shared';
-import { bumpVersion } from './steps/bump-version.js';
-import { writeChangelog } from './steps/write-changelog.js';
-import { commitAndTag, type GitOpsDeps } from './steps/git-operations.js';
-import { createGitHubRelease, type ReleaseOctokit } from './steps/github-release.js';
-import { openReleasePR, type OpenPROctokit } from './steps/open-pr.js';
-import { postCompletionComment, type CommentOctokit } from './steps/post-completion-comment.js';
+import {
+    releaseBranchName,
+    releaseTagName,
+    type ReleasePlan,
+    type ReleaseResult,
+} from '@tagline-sh/shared';
+import { bumpVersion } from '~/app/steps/bump-version';
+import { writeChangelog } from '~/app/steps/write-changelog';
+import { commitAndTag, type GitOpsDeps } from '~/app/steps/git-operations';
+import { createGitHubRelease, type ReleaseOctokit } from '~/app/steps/github-release';
+import { openReleasePR, type OpenPROctokit } from '~/app/steps/open-pr';
+import { postCompletionComment, type CommentOctokit } from '~/app/steps/post-completion-comment';
 
 /**
  * The intersection of every Octokit shape the steps need. We pass the same

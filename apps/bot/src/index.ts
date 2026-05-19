@@ -1,7 +1,7 @@
 import type { Probot } from 'probot';
-import { register as registerIssueComment } from './handlers/issue-comment.js';
-import { register as registerPullRequest } from './handlers/pull-request.js';
-import { register as registerInstallation } from './handlers/installation.js';
+import { register as registerIssueComment } from '~/app/handlers/issue-comment';
+import { register as registerPullRequest } from '~/app/handlers/pull-request';
+import { register as registerInstallation } from '~/app/handlers/installation';
 import { APP_DISPLAY_NAME } from '@tagline-sh/shared';
 
 /**

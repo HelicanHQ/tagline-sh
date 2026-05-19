@@ -2,12 +2,13 @@
 // re-exported so command handlers (Phase 4) and the dry-run report script can
 // import from a single place.
 
-export * from './github-reader.js';
-export * from './commit-parser.js';
-export * from './version-calculator.js';
-export * from './monorepo-detector.js';
-export * from './config-reader.js';
-export * from './changelog-writer.js';
-export * from './report-generator.js';
-export * from './pr-reader.js';
-export * from './octokit-reader.js';
+export * from '~/app/services/github-reader';
+export * from '~/app/services/commit-parser';
+export * from '~/app/services/version-calculator';
+export * from '~/app/services/monorepo-detector';
+export * from '~/app/services/config-reader';
+export * from '~/app/services/changelog-writer';
+export * from '~/app/services/report-generator';
+export * from '~/app/services/pr-reader';
+export * from '~/app/services/octokit-reader';
+export * from '~/app/services/package-planner';

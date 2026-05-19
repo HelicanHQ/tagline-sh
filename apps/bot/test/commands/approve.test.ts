@@ -11,6 +11,7 @@ describe('parseApproveCommand', () => {
         expect(parseApproveCommand('')).toEqual({
             bumpOverride: null,
             versionOverride: null,
+            packageBumpOverrides: new Map(),
             isDraft: false,
             isDryRun: false,
             branchOverride: null,
@@ -30,6 +31,7 @@ describe('parseApproveCommand', () => {
         expect(both).toEqual({
             bumpOverride: 'major',
             versionOverride: null,
+            packageBumpOverrides: new Map(),
             isDraft: true,
             isDryRun: true,
             branchOverride: null,
@@ -44,6 +46,7 @@ describe('parseApproveCommand', () => {
         expect(parseApproveCommand('as 2026.6.0')).toEqual({
             bumpOverride: null,
             versionOverride: '2026.6.0',
+            packageBumpOverrides: new Map(),
             isDraft: false,
             isDryRun: false,
             branchOverride: null,
@@ -72,6 +75,48 @@ describe('parseApproveCommand', () => {
     it('rejects unknown tokens', () => {
         expect(parseApproveCommand('--what')).toBeNull();
         expect(parseApproveCommand('foo')).toBeNull();
+    });
+
+    it('parses per-package overrides `name:bump` (M3.4)', () => {
+        const r = parseApproveCommand('api:minor ui:patch');
+        expect(r?.packageBumpOverrides).toEqual(
+            new Map([
+                ['api', 'minor'],
+                ['ui', 'patch'],
+            ]),
+        );
+        // Other fields stay default.
+        expect(r?.bumpOverride).toBeNull();
+        expect(r?.versionOverride).toBeNull();
+    });
+
+    it('accepts scoped package names in overrides', () => {
+        const r = parseApproveCommand('@acme/api:minor');
+        expect(r?.packageBumpOverrides.get('@acme/api')).toBe('minor');
+    });
+
+    it('combines per-package overrides with --draft / --dry-run', () => {
+        const r = parseApproveCommand('api:minor --draft --dry-run');
+        expect(r?.packageBumpOverrides.get('api')).toBe('minor');
+        expect(r?.isDraft).toBe(true);
+        expect(r?.isDryRun).toBe(true);
+    });
+
+    it('rejects per-package overrides combined with a global bump', () => {
+        expect(parseApproveCommand('minor api:patch')).toBeNull();
+    });
+
+    it('rejects per-package overrides combined with `as <version>`', () => {
+        expect(parseApproveCommand('as 1.2.3 api:patch')).toBeNull();
+    });
+
+    it('rejects duplicate package names in overrides', () => {
+        expect(parseApproveCommand('api:minor api:patch')).toBeNull();
+    });
+
+    it('rejects an unknown bump in the package-override pair', () => {
+        // `api:megamajor` — the bump half doesn't match. Unknown token path.
+        expect(parseApproveCommand('api:megamajor')).toBeNull();
     });
 
     it('rejects --branch with no argument', () => {

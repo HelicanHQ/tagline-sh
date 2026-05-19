@@ -1,4 +1,4 @@
-import type { BumpType, RepoConfig, VersioningConfig } from './types.js';
+import type { BumpType, RepoConfig, VersioningConfig } from '~/app/types';
 
 // --- Branding -----------------------------------------------------------------
 
@@ -52,6 +52,11 @@ export const BUMP_PRIORITY: Record<BumpType, number> = {
 /**
  * Default calver pattern when the user opts into calver without specifying a
  * pattern. `YYYY.0M.MICRO` matches the most common npm CalVer convention.
+ *
+ * Intentionally a pure literal — `@tagline-sh/shared` is consumed by both bot
+ * and action, and the action runs inside the user's CI runner where the bot's
+ * env vars don't exist. Per-deployment overrides happen at the bot side via
+ * `.release-agent.md` config, not via env vars in this shared package.
  */
 export const DEFAULT_CALVER_PATTERN = 'YYYY.0M.MICRO';
 
@@ -76,7 +81,15 @@ export const DEFAULT_CONFIG: RepoConfig = {
     rawContent: '',
 };
 
-/** AI configuration defaults. Users override via env vars at the bot host. */
+/**
+ * AI configuration defaults. The bot reads `process.env.AI_BASE_URL` /
+ * `AI_MODEL` at startup and passes them as `options` to `generateReport`,
+ * which falls back to these literals when an option is absent
+ * (`options.baseUrl ?? AI_DEFAULTS.baseUrl`). Keeping the defaults as pure
+ * literals here means the shared package has no env-var dependency and
+ * works identically on the bot side (Node server) and the action side
+ * (GitHub runner) — the two environments don't share env vars.
+ */
 export const AI_DEFAULTS = {
     baseUrl: 'https://openrouter.ai/api/v1',
     model: 'openai/gpt-4o-mini',

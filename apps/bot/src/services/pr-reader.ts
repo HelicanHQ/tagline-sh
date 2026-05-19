@@ -4,8 +4,8 @@ import type {
     PullRequestSummary,
     RepoRef,
     TagRef,
-} from './github-reader.js';
-import { parsePR } from './commit-parser.js';
+} from '~/app/services/github-reader';
+import { parsePR } from '~/app/services/commit-parser';
 import { isReleaseBranch, type ParsedPR } from '@tagline-sh/shared';
 
 // Matches `v1.2.3`, `v1.2.3-rc.0`, `1.2.3` etc. Tightened to require a

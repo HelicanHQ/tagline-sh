@@ -10,7 +10,7 @@
 // Phase 3 will introduce a real-GitHub variant of this script that swaps the
 // FakeGitHubReader for a live Octokit-backed implementation.
 import type { ReleaseReport } from '@tagline-sh/shared';
-import { attributePRsToPackages, detectMonorepo } from '../src/services/monorepo-detector.js';
+import { detectMonorepo, attributePRsToPackages } from '../src/services/monorepo-detector.js';
 import { readRepoConfig } from '../src/services/config-reader.js';
 import { aggregatePRBumps, parsePR } from '../src/services/commit-parser.js';
 import { calculateNextVersion } from '../src/services/version-calculator.js';
@@ -89,8 +89,10 @@ async function main(): Promise<void> {
         changelogPreview: ai.changelogPreview,
         isMonorepo: monorepo.type !== 'none',
         monorepoInfo: monorepo.type === 'none' ? null : monorepo,
+        packages: [],
         generatedAt: new Date().toISOString(),
         versioningScheme: 'semver',
+        summaryPreview: ai.summary,
     };
 
     console.log(JSON.stringify(report, null, 2));

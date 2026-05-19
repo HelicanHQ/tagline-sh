@@ -17,6 +17,8 @@ const TYPE_TO_SECTION: Record<string, SectionKind> = {
     chore: 'Changed',
     test: 'Changed',
     breaking: 'Removed',
+    hotfix: 'Fixed',
+    release: 'Changed',
 };
 
 /** ISO-date (`YYYY-MM-DD`) helper — used in the section header. */
@@ -122,10 +124,7 @@ const CHANGELOG_HEADER = [
  * new entry directly above it. If there isn't one, append after the standard
  * header. If the file is missing entirely, generate it from scratch.
  */
-export function prependEntryToChangelog(
-    existing: string | null,
-    newEntry: string,
-): string {
+export function prependEntryToChangelog(existing: string | null, newEntry: string): string {
     const entry = newEntry.trim() + '\n';
 
     if (!existing || existing.trim() === '') {

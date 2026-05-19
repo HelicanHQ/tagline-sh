@@ -1,6 +1,6 @@
 import type { Context, Probot } from 'probot';
-import { readRepoConfig } from '../services/index.js';
-import { OctokitGitHubReader, type ReaderOctokit } from '../services/octokit-reader.js';
+import { readRepoConfig } from '~/app/services';
+import { OctokitGitHubReader, type ReaderOctokit } from '~/app/services/octokit-reader';
 
 // See note in handlers/issue-comment.ts on the Octokit type adapter.
 const asReader = (octokit: Context['octokit']): ReaderOctokit =>

@@ -71,6 +71,18 @@ function buildSuccessBody(plan: ReleasePlan, tag: string, ctx: CompletionContext
     if (ctx.releaseUrl) lines.push(`- GitHub release: ${ctx.releaseUrl}`);
     if (ctx.prUrl) lines.push(`- Changelog PR: ${ctx.prUrl}`);
 
+    // "Ready to share" block (PLAN_ADDENDUM.md §8). The engineering lead can
+    // copy this directly into Slack, email, or a product changelog tool with
+    // zero editing. Lives BETWEEN the URLs and the optional `prError` block
+    // so the manual-recovery flow remains adjacent to the rest of the error
+    // context when both happen at once.
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+    lines.push('**Ready to share:**');
+    lines.push('');
+    lines.push(plan.releaseSummary.rawMarkdown.trimEnd());
+
     if (!ctx.prUrl && ctx.prError) {
         const branch = releaseBranchName(plan.nextVersion);
         const compareUrl = `https://github.com/${plan.repoOwner}/${plan.repoName}/compare/${plan.baseBranch}...${branch}`;

@@ -80,6 +80,21 @@ Tagline kicks off the workflow. When it finishes, it posts a completion comment 
 
 That's it.
 
+## Two changelogs from one approval
+
+Every release produces **two** artifacts, both AI-written in the same call:
+
+1. **A technical `CHANGELOG.md`** — conventional-commits-derived, grouped by `### Added` / `### Fixed` / `### Changed`. For developers and git history.
+2. **A plain-language summary** — one headline sentence, a 2–4 sentence body, and 2–5 highlight bullets. No PR numbers, no commit types. For product owners, customers, teammates in non-engineering roles.
+
+The summary appears in three places:
+
+- **The report comment** — collapsible "Plain-language summary" section, so you can review it before approving.
+- **The GitHub release body** — pinned above the technical changelog so anyone browsing the Releases page sees the readable version first.
+- **The completion comment** — under a "Ready to share" header. Copy this block into Slack, email, or your product changelog tool with zero editing.
+
+If your AI provider is unavailable, the summary degrades gracefully to a minimal deterministic shape (`{N} updates since {last-tag}` with highlights drawn from PR titles). The section is always there; only the prose quality varies.
+
 ## Next steps
 
 - [Slash commands reference](./slash-commands.md)

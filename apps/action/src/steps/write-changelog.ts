@@ -19,15 +19,19 @@ const CHANGELOG_HEADER = [
 ].join('\n');
 
 /**
- * Prepend the plan's `changelogContent` to `CHANGELOG.md` — single-repo and
- * monorepo flavors.
+ * Prepend changelog entries to per-package CHANGELOGs + root CHANGELOG.
  *
- * Single-repo: writes to `<root>/CHANGELOG.md`.
+ * Single-repo (`plan.packages` is empty): write `plan.changelogContent` to
+ * `<root>/CHANGELOG.md`. Unchanged from pre-M3.
  *
- * Monorepo: writes to *each affected* package's CHANGELOG.md, AND to a root
- * `CHANGELOG.md` that aggregates everything. The plan's `changelogContent` is
- * the aggregate form; per-package forms are derived from
- * `monorepoInfo.packages[*].affectedPRs`. Per PLAN.md §15.
+ * Monorepo (M3 — `plan.packages` is non-empty): EACH package gets its OWN
+ * `changelogContent` written to ITS OWN `CHANGELOG.md` — the previous
+ * implementation wrote the same aggregate content to every package, which
+ * meant `packages/api/CHANGELOG.md` contained changes from `packages/ui`
+ * and vice versa. Now each package's CHANGELOG reflects only what touched
+ * that package. The root `CHANGELOG.md` gets `plan.changelogContent` which
+ * the bot has built as a release-event aggregator (lists package versions
+ * with deep-links to per-package CHANGELOGs).
  */
 export async function writeChangelog(
     plan: ReleasePlan,
@@ -35,11 +39,10 @@ export async function writeChangelog(
 ): Promise<WriteChangelogResult> {
     const touched: string[] = [];
 
-    if (plan.isMonorepo && plan.monorepoInfo) {
-        for (const pkg of plan.monorepoInfo.packages) {
-            if (pkg.affectedPRs.length === 0) continue;
+    if (plan.packages.length > 0) {
+        for (const pkg of plan.packages) {
             const target = path.join(workspaceRoot, pkg.changelogPath);
-            await prependToFile(target, plan.changelogContent);
+            await prependToFile(target, pkg.changelogContent);
             touched.push(pkg.changelogPath);
         }
         const aggregate = path.join(workspaceRoot, 'CHANGELOG.md');

@@ -18,12 +18,13 @@ The bot replies with:
 - **Header** — last tag + date, target branch, PR/commit/contributor counts.
 - **Sections** — PRs grouped by `feat`, `fix`, and `chore` with ticket references.
 - **Recommendation** — suggested semver bump (`patch`/`minor`/`major`) with 2–3 sentences of AI reasoning.
-- **Changelog preview** — collapsible Keep-a-Changelog formatted block.
+- **Changelog preview** — collapsible Keep-a-Changelog formatted block (the technical changelog, for developers).
+- **Plain-language summary** — collapsible block with a headline, body, and 2–5 highlights in user-facing language (the release notes, for non-developers). One AI call produces both this and the changelog.
 - **Approval footer** — the `/approve` commands available.
 
 If no PRs have merged since the last tag, the bot replies with `No changes detected since vX.Y.Z` and posts nothing else.
 
-If the AI provider is unavailable, the report is still generated deterministically from commits; reasoning reads `"AI unavailable — manual review required"`.
+If the AI provider is unavailable, the report is still generated deterministically from commits; reasoning reads `"AI unavailable — manual review required"` and the plain-language summary degrades to a minimal shape (`v1.5.0 includes N updates`) — the section is always present, only the prose quality varies.
 
 ## `/approve [bump] [--draft] [--dry-run]`
 
@@ -46,10 +47,10 @@ Trigger a release.
 On approval, the bot:
 
 1. Re-fetches PRs (in case anything merged since the last report).
-2. Builds a `ReleasePlan` and dispatches `release-agent.yml` via `workflow_dispatch`.
+2. Builds a `ReleasePlan` — carrying forward the plain-language summary you previewed — and dispatches `release-agent.yml` via `workflow_dispatch`.
 3. Edits the acknowledgement comment to link to the workflow run.
 
-The action does the actual writes in your CI environment: bumps `package.json`, prepends `CHANGELOG.md`, commits with `[skip ci]`, creates and pushes the `vX.Y.Z` tag, publishes the GitHub release, and opens a PR from `release/vX.Y.Z` to your production branch. When done, it posts a completion comment on the same issue.
+The action does the actual writes in your CI environment: bumps `package.json`, prepends `CHANGELOG.md`, commits with `[skip ci]`, creates and pushes the `vX.Y.Z` tag, publishes the GitHub release (with the plain-language summary pinned above the technical changelog), and opens a PR from `release/vX.Y.Z` to your production branch. When done, it posts a completion comment on the same issue including a **Ready to share** block — the plain-language summary formatted for direct paste into Slack, email, or any product-changelog tool.
 
 ### Error cases
 

@@ -79,6 +79,10 @@ function isReleaseBranch(headRef) {
 function releaseTagName(version) {
   return version.startsWith("v") ? version : `v${version}`;
 }
+function packageTagName(packageName, version) {
+  const stripped = version.startsWith("v") ? version.slice(1) : version;
+  return `${packageName}@${stripped}`;
+}
 function maxBump(a, b) {
   return BUMP_PRIORITY[a] >= BUMP_PRIORITY[b] ? a : b;
 }
@@ -95,6 +99,36 @@ function excerpt(text, maxLen = 500) {
   const slice = trimmed.slice(0, maxLen);
   const lastSpace = slice.lastIndexOf(" ");
   return (lastSpace > maxLen * 0.6 ? slice.slice(0, lastSpace) : slice) + "\u2026";
+}
+function buildSummaryMarkdown(summary) {
+  const version = summary.version.startsWith("v") ? summary.version : `v${summary.version}`;
+  return [
+    `## What's new in ${version} \xB7 ${summary.date}`,
+    "",
+    summary.headline,
+    "",
+    summary.body,
+    "",
+    summary.highlights.map((h) => `- ${h}`).join("\n")
+  ].join("\n");
+}
+function formatSummaryDate(d) {
+  return d.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC"
+  });
+}
+function restampSummary(summary, version, now) {
+  const versionLabel = version.startsWith("v") ? version.slice(1) : version;
+  const intermediate = {
+    ...summary,
+    version: versionLabel,
+    date: formatSummaryDate(now),
+    rawMarkdown: ""
+  };
+  return { ...intermediate, rawMarkdown: buildSummaryMarkdown(intermediate) };
 }
 
 // src/schemas.ts
@@ -177,6 +211,26 @@ var RepoConfigSchema = z.object({
   customContext: z.string(),
   rawContent: z.string()
 });
+var ReleaseSummarySchema = z.object({
+  version: z.string().min(1),
+  date: z.string().min(1),
+  headline: z.string().min(1),
+  body: z.string().min(1),
+  highlights: z.array(z.string().min(1)).min(1).max(5),
+  rawMarkdown: z.string().min(1)
+});
+var PackageReleasePlanSchema = z.object({
+  name: z.string().min(1),
+  path: z.string().min(1),
+  packageJsonPath: z.string().min(1),
+  changelogPath: z.string().min(1),
+  currentVersion: z.string().min(1),
+  nextVersion: z.string().min(1),
+  bumpType: BumpTypeSchema,
+  prs: z.array(ParsedPRSchema),
+  changelogContent: z.string(),
+  tagName: z.string().min(1)
+});
 var ReleasePlanSchema = z.object({
   repoOwner: z.string().min(1),
   repoName: z.string().min(1),
@@ -187,8 +241,14 @@ var ReleasePlanSchema = z.object({
   lastTag: z.string().nullable(),
   prs: z.array(ParsedPRSchema),
   changelogContent: z.string(),
+  // Required, not optional — the bot ALWAYS produces a summary (AI or
+  // deterministic fallback). Making this nullable would let stale bot
+  // builds slip a missing-summary plan past the action boundary unnoticed.
+  releaseSummary: ReleaseSummarySchema,
   isMonorepo: z.boolean(),
   monorepoInfo: MonorepoInfoSchema.nullable(),
+  // Per-package plans (M3). Empty array for single-repo.
+  packages: z.array(PackageReleasePlanSchema),
   isDraft: z.boolean(),
   isDryRun: z.boolean(),
   issueNumber: z.number().int().nonnegative(),
@@ -223,22 +283,28 @@ export {
   MonorepoInfoSchema,
   MonorepoTypeSchema,
   PackageInfoSchema,
+  PackageReleasePlanSchema,
   ParsedCommitSchema,
   ParsedPRSchema,
   RELEASE_BRANCH_PREFIX,
   RELEASE_WORKFLOW_FILE,
   ReleasePlanSchema,
   ReleaseResultSchema,
+  ReleaseSummarySchema,
   RepoConfigSchema,
   VersioningConfigSchema,
   VersioningSchemeSchema,
   aggregateBumps,
+  buildSummaryMarkdown,
   excerpt,
   extractTickets,
+  formatSummaryDate,
   isReleaseBranch,
   maxBump,
+  packageTagName,
   parseReleasePlan,
   releaseBranchName,
-  releaseTagName
+  releaseTagName,
+  restampSummary
 };
 //# sourceMappingURL=index.js.map

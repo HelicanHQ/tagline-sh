@@ -1,4 +1,14 @@
-import type { ReleasePlan } from '@tagline-sh/shared';
+import type { ReleasePlan, ReleaseSummary } from '@tagline-sh/shared';
+
+const FIXTURE_SUMMARY: ReleaseSummary = {
+    version: '1.5.0',
+    date: 'May 18, 2026',
+    headline: 'Fixture release summary headline.',
+    body: 'Fixture release summary body. Two sentences for realism.',
+    highlights: ['Fixture highlight 1', 'Fixture highlight 2'],
+    rawMarkdown:
+        "## What's new in v1.5.0 · May 18, 2026\n\nFixture release summary headline.\n\nFixture release summary body. Two sentences for realism.\n\n- Fixture highlight 1\n- Fixture highlight 2",
+};
 
 export function makePlan(overrides: Partial<ReleasePlan> = {}): ReleasePlan {
     return {
@@ -11,8 +21,10 @@ export function makePlan(overrides: Partial<ReleasePlan> = {}): ReleasePlan {
         lastTag: 'v1.4.2',
         prs: [],
         changelogContent: '## [1.5.0]\n',
+        releaseSummary: FIXTURE_SUMMARY,
         isMonorepo: false,
         monorepoInfo: null,
+        packages: [],
         isDraft: false,
         isDryRun: false,
         issueNumber: 7,

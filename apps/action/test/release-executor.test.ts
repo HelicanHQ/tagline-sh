@@ -77,6 +77,40 @@ describe('executeRelease — happy path', () => {
         expect(calls.createComment).toHaveBeenCalled();
     });
 
+    it("prepends the release summary above the technical changelog in the release body", async () => {
+        const { octokit, calls } = fakeOctokit();
+        const git = fakeGit();
+        await executeRelease(makePlan(), {
+            octokit,
+            workspaceRoot: dir,
+            git: git as unknown as Parameters<typeof executeRelease>[1]['git'],
+        });
+
+        const releaseCall = calls.createRelease.mock.calls[0]?.[0] as { body: string };
+        // PLAN_ADDENDUM §7: summary first, then `---`, then changelog.
+        const summaryIdx = releaseCall.body.indexOf("What's new in v1.5.0");
+        const sepIdx = releaseCall.body.indexOf('\n---\n');
+        const changelogIdx = releaseCall.body.indexOf('## [1.5.0]');
+        expect(summaryIdx).toBeGreaterThanOrEqual(0);
+        expect(sepIdx).toBeGreaterThan(summaryIdx);
+        expect(changelogIdx).toBeGreaterThan(sepIdx);
+    });
+
+    it("includes a 'Ready to share' block in the completion comment", async () => {
+        const { octokit, calls } = fakeOctokit();
+        const git = fakeGit();
+        await executeRelease(makePlan(), {
+            octokit,
+            workspaceRoot: dir,
+            git: git as unknown as Parameters<typeof executeRelease>[1]['git'],
+        });
+
+        const commentBody = (calls.createComment.mock.calls[0]?.[0] as { body: string }).body;
+        expect(commentBody).toContain('Ready to share');
+        expect(commentBody).toContain("What's new in v1.5.0");
+        expect(commentBody).toContain('- Added the new thing');
+    });
+
     it('dry-run skips git/release/PR but still bumps + writes changelog', async () => {
         const { octokit, calls } = fakeOctokit();
         const git = fakeGit();
@@ -166,5 +200,10 @@ describe('executeRelease — failure path', () => {
         expect(body.body).toContain("couldn't open the changelog PR");
         expect(body.body).toContain('/compare/main...release/v1.5.0');
         expect(body.body).toContain('Allow GitHub Actions to create and approve pull requests');
+        // The "Ready to share" block still renders even when the PR step fails —
+        // the release shipped, the lead should still be able to copy the
+        // summary into Slack regardless of the PR-creation hiccup.
+        expect(body.body).toContain('Ready to share');
+        expect(body.body).toContain("What's new in v1.5.0");
     });
 });

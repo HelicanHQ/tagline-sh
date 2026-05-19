@@ -9,9 +9,15 @@ export interface BumpResult {
 /**
  * Update `package.json#version` in-place.
  *
- * For monorepos, every package mentioned in `plan.monorepoInfo.packages` gets
- * bumped. The root `package.json` is bumped only when it has a version
- * (typical: not a monorepo root, OR a monorepo root that itself ships).
+ * Single-repo (`plan.packages` is empty): bump the root `package.json` to
+ * `plan.nextVersion`. Unchanged from pre-M3.
+ *
+ * Monorepo (M3 — `plan.packages` is non-empty): each entry in `plan.packages`
+ * gets bumped to its own `nextVersion`. The root `package.json` is left alone
+ * because in a true monorepo there's no "the version" — release events are
+ * package-scoped. (Previously a known bug: every package was bumped to the
+ * same string; the root's monorepoInfo had per-package versions but they
+ * were ignored at bump time.)
  *
  * Mutates files on disk relative to `workspaceRoot`. Returns the relative
  * paths it touched so callers can `git add` them precisely.
@@ -22,17 +28,11 @@ export async function bumpVersion(
 ): Promise<BumpResult> {
     const touched: string[] = [];
 
-    if (plan.isMonorepo && plan.monorepoInfo) {
-        for (const pkg of plan.monorepoInfo.packages) {
-            await rewriteVersion(path.join(workspaceRoot, pkg.packageJsonPath), plan.nextVersion);
+    if (plan.packages.length > 0) {
+        for (const pkg of plan.packages) {
+            const absPath = path.join(workspaceRoot, pkg.packageJsonPath);
+            await rewriteVersion(absPath, pkg.nextVersion);
             touched.push(pkg.packageJsonPath);
-        }
-        if (plan.monorepoInfo.rootPackage) {
-            const rootPath = plan.monorepoInfo.rootPackage.packageJsonPath;
-            if (await fileHasVersion(path.join(workspaceRoot, rootPath))) {
-                await rewriteVersion(path.join(workspaceRoot, rootPath), plan.nextVersion);
-                touched.push(rootPath);
-            }
         }
     } else {
         const rootPath = path.join(workspaceRoot, 'package.json');

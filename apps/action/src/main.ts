@@ -1,7 +1,7 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
 import { ReleasePlanSchema } from '@tagline-sh/shared';
-import { executeRelease, type ExecutorOctokit } from './release-executor.js';
+import { executeRelease, type ExecutorOctokit } from '~/app/release-executor';
 
 /**
  * Action entry point. Reads inputs, validates the `release_plan` JSON, and

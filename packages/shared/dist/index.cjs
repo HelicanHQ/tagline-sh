@@ -34,23 +34,29 @@ __export(index_exports, {
   MonorepoInfoSchema: () => MonorepoInfoSchema,
   MonorepoTypeSchema: () => MonorepoTypeSchema,
   PackageInfoSchema: () => PackageInfoSchema,
+  PackageReleasePlanSchema: () => PackageReleasePlanSchema,
   ParsedCommitSchema: () => ParsedCommitSchema,
   ParsedPRSchema: () => ParsedPRSchema,
   RELEASE_BRANCH_PREFIX: () => RELEASE_BRANCH_PREFIX,
   RELEASE_WORKFLOW_FILE: () => RELEASE_WORKFLOW_FILE,
   ReleasePlanSchema: () => ReleasePlanSchema,
   ReleaseResultSchema: () => ReleaseResultSchema,
+  ReleaseSummarySchema: () => ReleaseSummarySchema,
   RepoConfigSchema: () => RepoConfigSchema,
   VersioningConfigSchema: () => VersioningConfigSchema,
   VersioningSchemeSchema: () => VersioningSchemeSchema,
   aggregateBumps: () => aggregateBumps,
+  buildSummaryMarkdown: () => buildSummaryMarkdown,
   excerpt: () => excerpt,
   extractTickets: () => extractTickets,
+  formatSummaryDate: () => formatSummaryDate,
   isReleaseBranch: () => isReleaseBranch,
   maxBump: () => maxBump,
+  packageTagName: () => packageTagName,
   parseReleasePlan: () => parseReleasePlan,
   releaseBranchName: () => releaseBranchName,
-  releaseTagName: () => releaseTagName
+  releaseTagName: () => releaseTagName,
+  restampSummary: () => restampSummary
 });
 module.exports = __toCommonJS(index_exports);
 
@@ -135,6 +141,10 @@ function isReleaseBranch(headRef) {
 function releaseTagName(version) {
   return version.startsWith("v") ? version : `v${version}`;
 }
+function packageTagName(packageName, version) {
+  const stripped = version.startsWith("v") ? version.slice(1) : version;
+  return `${packageName}@${stripped}`;
+}
 function maxBump(a, b) {
   return BUMP_PRIORITY[a] >= BUMP_PRIORITY[b] ? a : b;
 }
@@ -151,6 +161,36 @@ function excerpt(text, maxLen = 500) {
   const slice = trimmed.slice(0, maxLen);
   const lastSpace = slice.lastIndexOf(" ");
   return (lastSpace > maxLen * 0.6 ? slice.slice(0, lastSpace) : slice) + "\u2026";
+}
+function buildSummaryMarkdown(summary) {
+  const version = summary.version.startsWith("v") ? summary.version : `v${summary.version}`;
+  return [
+    `## What's new in ${version} \xB7 ${summary.date}`,
+    "",
+    summary.headline,
+    "",
+    summary.body,
+    "",
+    summary.highlights.map((h) => `- ${h}`).join("\n")
+  ].join("\n");
+}
+function formatSummaryDate(d) {
+  return d.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC"
+  });
+}
+function restampSummary(summary, version, now) {
+  const versionLabel = version.startsWith("v") ? version.slice(1) : version;
+  const intermediate = {
+    ...summary,
+    version: versionLabel,
+    date: formatSummaryDate(now),
+    rawMarkdown: ""
+  };
+  return { ...intermediate, rawMarkdown: buildSummaryMarkdown(intermediate) };
 }
 
 // src/schemas.ts
@@ -233,6 +273,26 @@ var RepoConfigSchema = import_zod.z.object({
   customContext: import_zod.z.string(),
   rawContent: import_zod.z.string()
 });
+var ReleaseSummarySchema = import_zod.z.object({
+  version: import_zod.z.string().min(1),
+  date: import_zod.z.string().min(1),
+  headline: import_zod.z.string().min(1),
+  body: import_zod.z.string().min(1),
+  highlights: import_zod.z.array(import_zod.z.string().min(1)).min(1).max(5),
+  rawMarkdown: import_zod.z.string().min(1)
+});
+var PackageReleasePlanSchema = import_zod.z.object({
+  name: import_zod.z.string().min(1),
+  path: import_zod.z.string().min(1),
+  packageJsonPath: import_zod.z.string().min(1),
+  changelogPath: import_zod.z.string().min(1),
+  currentVersion: import_zod.z.string().min(1),
+  nextVersion: import_zod.z.string().min(1),
+  bumpType: BumpTypeSchema,
+  prs: import_zod.z.array(ParsedPRSchema),
+  changelogContent: import_zod.z.string(),
+  tagName: import_zod.z.string().min(1)
+});
 var ReleasePlanSchema = import_zod.z.object({
   repoOwner: import_zod.z.string().min(1),
   repoName: import_zod.z.string().min(1),
@@ -243,8 +303,14 @@ var ReleasePlanSchema = import_zod.z.object({
   lastTag: import_zod.z.string().nullable(),
   prs: import_zod.z.array(ParsedPRSchema),
   changelogContent: import_zod.z.string(),
+  // Required, not optional — the bot ALWAYS produces a summary (AI or
+  // deterministic fallback). Making this nullable would let stale bot
+  // builds slip a missing-summary plan past the action boundary unnoticed.
+  releaseSummary: ReleaseSummarySchema,
   isMonorepo: import_zod.z.boolean(),
   monorepoInfo: MonorepoInfoSchema.nullable(),
+  // Per-package plans (M3). Empty array for single-repo.
+  packages: import_zod.z.array(PackageReleasePlanSchema),
   isDraft: import_zod.z.boolean(),
   isDryRun: import_zod.z.boolean(),
   issueNumber: import_zod.z.number().int().nonnegative(),
@@ -280,22 +346,28 @@ function parseReleasePlan(json) {
   MonorepoInfoSchema,
   MonorepoTypeSchema,
   PackageInfoSchema,
+  PackageReleasePlanSchema,
   ParsedCommitSchema,
   ParsedPRSchema,
   RELEASE_BRANCH_PREFIX,
   RELEASE_WORKFLOW_FILE,
   ReleasePlanSchema,
   ReleaseResultSchema,
+  ReleaseSummarySchema,
   RepoConfigSchema,
   VersioningConfigSchema,
   VersioningSchemeSchema,
   aggregateBumps,
+  buildSummaryMarkdown,
   excerpt,
   extractTickets,
+  formatSummaryDate,
   isReleaseBranch,
   maxBump,
+  packageTagName,
   parseReleasePlan,
   releaseBranchName,
-  releaseTagName
+  releaseTagName,
+  restampSummary
 });
 //# sourceMappingURL=index.cjs.map

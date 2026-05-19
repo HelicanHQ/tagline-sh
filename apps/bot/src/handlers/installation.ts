@@ -1,5 +1,5 @@
 import type { Context, Probot } from 'probot';
-import { welcomeIssue } from '../utils/comments.js';
+import { welcomeIssue } from '~/app/utils/comments';
 
 /**
  * On app installation, open a welcome issue with the setup checklist in each

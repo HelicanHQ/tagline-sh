@@ -1,7 +1,8 @@
-import type { ReleaseReport } from '@tagline-sh/shared';
+import type { PackageReleasePlan, ReleaseReport } from '@tagline-sh/shared';
 import {
     aggregatePRBumps,
     attributePRsToPackages,
+    buildPackagePlans,
     calculateNextVersion,
     detectMonorepo,
     deterministicReport,
@@ -9,10 +10,11 @@ import {
     getCurrentVersion,
     getPRsSinceLastTag,
     hydratePRs,
+    monorepoEventId,
     OctokitGitHubReader,
     type ReaderOctokit,
     readRepoConfig,
-} from '../services/index.js';
+} from '~/app/services';
 
 export interface ReleaseReportInput {
     octokit: ReaderOctokit;
@@ -37,9 +39,7 @@ export interface ReleaseReportResult {
  * This function is the single composition point for the bot's read services:
  *   config → monorepo → tags → PRs → commits → version math → AI/fallback
  */
-export async function buildReleaseReport(
-    input: ReleaseReportInput,
-): Promise<ReleaseReportResult> {
+export async function buildReleaseReport(input: ReleaseReportInput): Promise<ReleaseReportResult> {
     const reader = new OctokitGitHubReader(input.octokit);
     const repoRef = { owner: input.owner, repo: input.repo };
 
@@ -56,10 +56,6 @@ export async function buildReleaseReport(
     const parsedPRs = hydrated.map((h) => h.pr);
 
     const suggestedBump = aggregatePRBumps(parsedPRs);
-    const suggestedVersion =
-        suggestedBump === 'none'
-            ? currentVersion
-            : calculateNextVersion(currentVersion, suggestedBump, branch, config);
 
     const monorepoInfo =
         monorepo.type === 'none'
@@ -68,6 +64,24 @@ export async function buildReleaseReport(
                   monorepo,
                   hydrated.map((h) => ({ pr: h.pr, files: h.files })),
               );
+
+    // M3: monorepos get per-package plans. The aggregate `suggestedVersion`
+    // becomes an event-identifier date instead of a semver version — it
+    // names the release event for the branch (`release/vevent-2026-05-19`)
+    // and the PR title but is not a tag. Per-package tags ship via
+    // `packages[*].tagName`. Single-repos keep the historical single-version
+    // flow exactly as before.
+    let packages: PackageReleasePlan[] = [];
+    let suggestedVersion: string;
+    if (monorepoInfo) {
+        packages = buildPackagePlans({ monorepoInfo, branch, config });
+        suggestedVersion = packages.length > 0 ? monorepoEventId() : currentVersion;
+    } else {
+        suggestedVersion =
+            suggestedBump === 'none'
+                ? currentVersion
+                : calculateNextVersion(currentVersion, suggestedBump, branch, config);
+    }
 
     let aiOutput;
     if (input.ai?.apiKey) {
@@ -97,8 +111,10 @@ export async function buildReleaseReport(
         versioningScheme: config.versioning.scheme,
         reasoning: aiOutput.reasoning,
         changelogPreview: aiOutput.changelogPreview,
+        summaryPreview: aiOutput.summary,
         isMonorepo: monorepoInfo !== null,
         monorepoInfo,
+        packages,
         generatedAt: new Date().toISOString(),
     };
 

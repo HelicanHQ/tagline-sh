@@ -1,13 +1,13 @@
 import type { Context, Probot } from 'probot';
 import { APP_DISPLAY_NAME } from '@tagline-sh/shared';
-import { buildReleaseReport } from '../commands/release-report.js';
+import { buildReleaseReport } from '~/app/commands/release-report';
 import {
     buildApprovePlan,
     dispatchReleaseWorkflow,
     parseApproveCommand,
     type DispatchOctokit,
 } from '../commands/approve.js';
-import type { ReaderOctokit } from '../services/octokit-reader.js';
+import type { ReaderOctokit } from '~/app/services/octokit-reader';
 import {
     acknowledgementComment,
     errorComment,
@@ -15,8 +15,8 @@ import {
     noChangesComment,
     noPermissionComment,
     reportComment,
-} from '../utils/comments.js';
-import { checkWritePermission, type PermissionsOctokit } from '../utils/permissions.js';
+} from '~/app/utils/comments';
+import { checkWritePermission, type PermissionsOctokit } from '~/app/utils/permissions';
 
 // Probot's `context.octokit` and the bare `octokit` package's `Octokit` are
 // structurally identical for the methods we use, but their TypeScript types
@@ -54,9 +54,7 @@ function readAIConfig(): AIConfig | undefined {
  *
  * Exported as a free function so it is unit-testable with a synthetic Context.
  */
-export async function handleIssueComment(
-    context: Context<'issue_comment.created'>,
-): Promise<void> {
+export async function handleIssueComment(context: Context<'issue_comment.created'>): Promise<void> {
     const comment = context.payload.comment;
     const sender = context.payload.sender;
 
@@ -124,9 +122,7 @@ async function runReleaseReport(
         const { report } = await buildReleaseReport(buildOpts);
 
         const body =
-            report.prs.length === 0
-                ? noChangesComment(report.lastTag)
-                : reportComment(report);
+            report.prs.length === 0 ? noChangesComment(report.lastTag) : reportComment(report);
 
         await context.octokit.rest.issues.updateComment({
             ...repo,

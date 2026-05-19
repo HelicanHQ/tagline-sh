@@ -8,7 +8,7 @@ import {
     type ParsedPR,
     COMMIT_TYPE_BUMP,
 } from '@tagline-sh/shared';
-import type { CommitRef, PullRequestSummary } from './github-reader.js';
+import type { CommitRef, PullRequestSummary } from '~/app/services/github-reader';
 
 // Conventional Commits grammar:
 //   <type>(<scope>)?(!)?: <subject>
@@ -46,6 +46,8 @@ const KNOWN_TYPES = new Set<CommitType>([
     'chore',
     'revert',
     'breaking',
+    'hotfix',
+    'release',
 ]);
 
 /**

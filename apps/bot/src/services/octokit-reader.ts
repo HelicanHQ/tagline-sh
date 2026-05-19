@@ -6,7 +6,7 @@ import type {
     PullRequestSummary,
     RepoRef,
     TagRef,
-} from './github-reader.js';
+} from '~/app/services/github-reader';
 
 /**
  * Minimal Octokit shape this reader needs. Defined as a `Pick` so we accept
@@ -43,9 +43,10 @@ export class OctokitGitHubReader implements GitHubReader {
             const data = res.data;
             if (Array.isArray(data) || data.type !== 'file') return null;
             if (!('content' in data) || typeof data.content !== 'string') return null;
-            return Buffer.from(data.content, data.encoding === 'base64' ? 'base64' : 'utf8').toString(
-                'utf8',
-            );
+            return Buffer.from(
+                data.content,
+                data.encoding === 'base64' ? 'base64' : 'utf8',
+            ).toString('utf8');
         } catch (err) {
             if (isStatusError(err, 404)) return null;
             throw err;
@@ -110,12 +111,7 @@ export class OctokitGitHubReader implements GitHubReader {
         branch: string,
         since: string | null,
     ): Promise<PullRequestSummary[]> {
-        const qParts = [
-            `repo:${repo.owner}/${repo.repo}`,
-            'is:pr',
-            'is:merged',
-            `base:${branch}`,
-        ];
+        const qParts = [`repo:${repo.owner}/${repo.repo}`, 'is:pr', 'is:merged', `base:${branch}`];
         if (since) qParts.push(`merged:>${since}`);
         const q = qParts.join(' ');
 
@@ -153,15 +149,12 @@ export class OctokitGitHubReader implements GitHubReader {
 
     async listPRCommits(repo: RepoRef, prNumber: number): Promise<CommitRef[]> {
         const result: CommitRef[] = [];
-        const iterator = this.octokit.paginate.iterator(
-            this.octokit.rest.pulls.listCommits,
-            {
-                owner: repo.owner,
-                repo: repo.repo,
-                pull_number: prNumber,
-                per_page: 100,
-            },
-        );
+        const iterator = this.octokit.paginate.iterator(this.octokit.rest.pulls.listCommits, {
+            owner: repo.owner,
+            repo: repo.repo,
+            pull_number: prNumber,
+            per_page: 100,
+        });
         for await (const { data } of iterator) {
             for (const c of data) {
                 result.push({

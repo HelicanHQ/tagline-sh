@@ -122,7 +122,25 @@ export function reportComment(report: ReleaseReport): string {
     lines.push('');
     lines.push('### Recommendation');
     lines.push('');
-    if (report.versioningScheme === 'semver') {
+    if (report.packages.length > 0) {
+        // Monorepo (M3): per-package table replaces the single-version line.
+        // Each row is what the action will ship; packages with no PRs since
+        // the last tag are absent by design (won't be bumped).
+        lines.push(
+            `This release event ships **${report.packages.length} package${report.packages.length === 1 ? '' : 's'}**:`,
+        );
+        lines.push('');
+        lines.push('| Package | Current → Next | Bump | PRs |');
+        lines.push('|---|---|---|---|');
+        for (const pkg of report.packages) {
+            const prRefs = pkg.prs.map((p) => `#${p.number}`).join(', ') || '—';
+            lines.push(
+                `| \`${pkg.name}\` | \`${pkg.currentVersion} → ${pkg.nextVersion}\` | \`${pkg.bumpType}\` | ${prRefs} |`,
+            );
+        }
+        lines.push('');
+        lines.push('_Packages without attributed PRs are skipped._');
+    } else if (report.versioningScheme === 'semver') {
         lines.push(`**Suggested bump:** \`${bumpHint}\` → \`v${report.suggestedVersion}\``);
     } else {
         lines.push(
@@ -142,11 +160,24 @@ export function reportComment(report: ReleaseReport): string {
     lines.push('```');
     lines.push('');
     lines.push('</details>');
+
+    // Plain-language summary block — the user-facing release notes (PLAN_ADDENDUM
+    // §6). Always rendered, even on the deterministic-fallback path; the
+    // collapsible `<details>` keeps it out of the way when minimal, and a
+    // consistent UI is easier to learn than one that conditionally appears.
+    lines.push('');
+    lines.push('<details>');
+    lines.push('<summary>Plain-language summary (for Slack / product changelog)</summary>');
+    lines.push('');
+    lines.push(report.summaryPreview.rawMarkdown.trimEnd());
+    lines.push('');
+    lines.push('</details>');
+
     lines.push('');
     lines.push('---');
     lines.push('');
     lines.push('Reply with a command to release:');
-    lines.push(approveCommandHints(report.versioningScheme));
+    lines.push(approveCommandHints(report));
 
     return lines.join('\n');
 }
@@ -154,11 +185,18 @@ export function reportComment(report: ReleaseReport): string {
 /**
  * Render the inline `/approve` quick-pick suggestions at the bottom of the
  * report comment. SemVer offers bump words; calver / incremental offer the
- * `as <version>` override instead because bump words are rejected.
+ * `as <version>` override instead because bump words are rejected. Monorepos
+ * offer the per-package override grammar.
  */
-function approveCommandHints(scheme: ReleaseReport['versioningScheme']): string {
+function approveCommandHints(report: ReleaseReport): string {
     const flags = '`/approve --draft` &nbsp; `/approve --dry-run`';
-    if (scheme === 'semver') {
+    if (report.packages.length > 0) {
+        return (
+            '`/approve` &nbsp; `/approve <name>:<bump>` (e.g. `/approve api:minor ui:patch`) &nbsp; ' +
+            flags
+        );
+    }
+    if (report.versioningScheme === 'semver') {
         return (
             '`/approve` &nbsp; `/approve patch` &nbsp; `/approve minor` &nbsp; ' +
             '`/approve major` &nbsp; ' +
