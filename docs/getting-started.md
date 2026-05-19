@@ -9,7 +9,7 @@ This guide gets you from zero to a real release in about five minutes.
 1. The **Tagline GitHub App** installed on a repo.
 2. The **release-agent.yml workflow** in your repo.
 3. One **repo secret** (`AI_API_KEY`) for the AI provider.
-4. Optionally, a `.release-agent.md` config file.
+4. A `.release-agent.md` config file is required
 
 ## Step 1 — install the GitHub App
 
@@ -32,9 +32,9 @@ The workflow's `permissions:` block must grant exactly three things — these sc
 
 ```yaml
 permissions:
-    contents: write          # commit version bumps, push the release branch + tag, create the GitHub release
-    pull-requests: write     # open the changelog PR back to the production branch
-    issues: write            # post the completion comment on the originating issue
+    contents: write # commit version bumps, push the release branch + tag, create the GitHub release
+    pull-requests: write # open the changelog PR back to the production branch
+    issues: write # post the completion comment on the originating issue
 ```
 
 The example workflow files already include these. If you build your own workflow and see `Resource not accessible by integration` in the Actions log, you're missing one of the three — most commonly `issues: write`.
@@ -45,11 +45,11 @@ Tagline calls an **OpenAI-compatible** endpoint for the report's reasoning. Any 
 
 Set the following repo or org secret:
 
-| Secret | Required? | Default |
-|--------|-----------|---------|
-| `AI_API_KEY` | yes | — |
-| `AI_BASE_URL` | no | `https://openrouter.ai/api/v1` |
-| `AI_MODEL` | no | `openai/gpt-4o-mini` |
+| Secret        | Required? | Default                        |
+| ------------- | --------- | ------------------------------ |
+| `AI_API_KEY`  | yes       | —                              |
+| `AI_BASE_URL` | no        | `https://openrouter.ai/api/v1` |
+| `AI_MODEL`    | no        | `openai/gpt-4o-mini`           |
 
 If `AI_API_KEY` is unset, Tagline falls back to a deterministic report generated from your commit history with `reasoning: "AI unavailable — manual review required"`.
 
