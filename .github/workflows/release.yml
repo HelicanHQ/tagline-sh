@@ -1,0 +1,150 @@
+name: Release distribution
+
+# When a vX.Y.Z tag lands on this monorepo, build the action bundle and sync
+# it to tagline-sh/release-agent-action — the consumer-facing repo whose
+# action.yml lives at root, as required for Marketplace listings. The
+# distribution repo receives:
+#
+#   - the bundled `dist/index.js` and matching `action.yml`
+#   - the same semver tag (vX.Y.Z), created fresh, never overwritten
+#   - a force-updated rolling major tag (vN) so consumers can pin to `@vN`
+#     and pick up patch + minor releases inside the major automatically
+#   - a GitHub Release pointing back to the source-of-truth release here
+#
+# Pre-release tags (anything containing `-`, e.g. v0.1.0-rc.1) are skipped
+# — pre-releases shouldn't reach the consumer-facing repo. The job-level
+# `if:` predicate runs the skip in zero seconds.
+#
+# Required repo secrets:
+#   - TAGLINE_APP_ID            — the Tagline GitHub App's numeric ID
+#   - TAGLINE_APP_PRIVATE_KEY   — the App's PEM private key
+#
+# Pre-requisite (one-time): install the Tagline GitHub App on
+# `tagline-sh/release-agent-action` with `contents: write` so the App
+# installation token minted below can push commits + tags.
+#
+# Security: the only externally-influenceable input is `github.ref_name`
+# (the tag string). It is always passed into shell steps via a `TAG` env
+# var, never via `${{ … }}` interpolation inside a `run:` block. Tag-push
+# is a maintainer-only operation on this repo, but the env-var discipline
+# is kept as a defense-in-depth pattern.
+
+on:
+    push:
+        tags:
+            - 'v*'
+
+env:
+    DIST_OWNER: tagline-sh
+    DIST_REPO_NAME: release-agent-action
+
+# Source-repo permissions are read-only; the cross-repo writes happen via
+# the short-lived App installation token, not via GITHUB_TOKEN.
+permissions:
+    contents: read
+
+jobs:
+    distribute:
+        runs-on: ubuntu-latest
+        # Skip pre-release tags (vX.Y.Z-* like v1.0.0-rc.1).
+        if: ${{ !contains(github.ref_name, '-') }}
+
+        steps:
+            - name: Checkout source
+              uses: actions/checkout@v4
+
+            - name: Set up pnpm
+              uses: pnpm/action-setup@v4
+              with:
+                  version: 10.22.0
+
+            - name: Set up Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '24'
+                  cache: 'pnpm'
+
+            - name: Install
+              run: pnpm install --frozen-lockfile
+
+            - name: Build action bundle (and its workspace deps)
+              # `...` walks the dep graph — builds @tagline-sh/shared first,
+              # then @tagline-sh/action. Without `...` the action build would
+              # fail when shared/dist is missing.
+              run: pnpm --filter @tagline-sh/action... build
+
+            - name: Verify the bundle and action.yml exist
+              run: |
+                  test -s apps/action/dist/index.js
+                  test -s apps/action/action.yml
+
+            - name: Mint distribution-repo App token
+              # Short-lived (1 hour), scoped to a single repo. Materially
+              # safer than a PAT (no person dependency, no broad scopes).
+              id: app-token
+              uses: actions/create-github-app-token@v1
+              with:
+                  app-id: ${{ secrets.TAGLINE_APP_ID }}
+                  private-key: ${{ secrets.TAGLINE_APP_PRIVATE_KEY }}
+                  owner: ${{ env.DIST_OWNER }}
+                  repositories: ${{ env.DIST_REPO_NAME }}
+
+            - name: Checkout distribution repo
+              uses: actions/checkout@v4
+              with:
+                  repository: ${{ env.DIST_OWNER }}/${{ env.DIST_REPO_NAME }}
+                  token: ${{ steps.app-token.outputs.token }}
+                  path: dist-repo
+                  fetch-depth: 0
+
+            - name: Stage bundle + action.yml into distribution repo
+              run: |
+                  mkdir -p dist-repo/dist
+                  cp apps/action/dist/index.js dist-repo/dist/index.js
+                  cp apps/action/action.yml dist-repo/action.yml
+
+            - name: Commit + tag the distribution repo
+              working-directory: dist-repo
+              env:
+                  # `<app-slug>[bot]@users.noreply.github.com` is the
+                  # canonical author identity for App-token-authored
+                  # commits — shows as verified on the distribution repo.
+                  APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+                  TAG: ${{ github.ref_name }}
+              run: |
+                  git config user.name "${APP_SLUG}[bot]"
+                  git config user.email "${APP_SLUG}[bot]@users.noreply.github.com"
+
+                  # vX.Y.Z → vX
+                  MAJOR="${TAG%%.*}"
+
+                  git add action.yml dist/index.js
+                  if git diff --cached --quiet; then
+                      echo "Distribution repo already up to date — no commit needed; tagging only."
+                  else
+                      # `[skip ci]` keeps the distribution repo's own CI
+                      # (if any) from re-firing on this synthesized commit.
+                      git commit -m "chore(release): ${TAG} [skip ci]"
+                      git push origin HEAD
+                  fi
+
+                  # Semver tag — created fresh per release, never overwritten.
+                  git tag -a "${TAG}" -m "${TAG}"
+                  # Rolling major tag — force-moved to track the latest
+                  # commit so consumers pinning to `@vN` get automatic
+                  # patch + minor updates within the major.
+                  git tag -fa "${MAJOR}" -m "${MAJOR}"
+                  git push origin "${TAG}"
+                  git push origin "${MAJOR}" --force
+
+            - name: Create GitHub Release on distribution repo
+              env:
+                  GH_TOKEN: ${{ steps.app-token.outputs.token }}
+                  TAG: ${{ github.ref_name }}
+                  SOURCE_REPO: ${{ github.repository }}
+              run: |
+                  NOTES="Distribution build of [${SOURCE_REPO}@${TAG}](https://github.com/${SOURCE_REPO}/releases/tag/${TAG}). The full source lives in the source-of-truth repo; this distribution-only repo carries the prebuilt action bundle so users can reference \`${DIST_OWNER}/${DIST_REPO_NAME}@v1\` (rolling major) or \`${DIST_OWNER}/${DIST_REPO_NAME}@${TAG}\` (pinned) from their workflows."
+                  gh release create "${TAG}" \
+                      --repo "${DIST_OWNER}/${DIST_REPO_NAME}" \
+                      --title "${TAG}" \
+                      --notes "${NOTES}"

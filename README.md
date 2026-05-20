@@ -113,6 +113,7 @@ Bot dev requires a personal GitHub App + smee.io webhook proxy — see [`apps/bo
 - [Configuration (`.release-agent.md`)](./docs/configuration.md)
 - [Monorepo behavior](./docs/monorepo.md)
 - [Self-hosting](./docs/self-hosting.md)
+- [Security & supply-chain guidance](./docs/security.md)
 
 ## Roadmap
 
