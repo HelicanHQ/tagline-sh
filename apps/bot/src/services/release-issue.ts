@@ -1,4 +1,19 @@
 import type { ParsedPR } from '@tagline-sh/shared';
+import {
+    RELEASE_ISSUE_LABEL,
+    RELEASE_ISSUE_LABEL_COLOR,
+    RELEASE_ISSUE_LABEL_DESCRIPTION,
+    buildReleaseIssueClosingCommentBody,
+    encodeReleaseIssueMarker,
+    extractReleaseIssueMarker,
+    type ReleaseIssueMarker,
+} from '@tagline-sh/shared';
+
+// Local aliases so the rest of this file keeps reading naturally. The
+// `export { ... as ... }` block below also surfaces these names for
+// callers that imported the bot-side aliases before the shared move.
+const encodeMarker = encodeReleaseIssueMarker;
+const extractMarker = extractReleaseIssueMarker;
 import type { RepoRef } from '~/app/services/github-reader';
 
 /**
@@ -6,10 +21,10 @@ import type { RepoRef } from '~/app/services/github-reader';
  * release cycle, slash commands are accepted only on that issue, and the
  * issue closes when the release ships.
  *
- * This module is pure helpers + a narrow write-side Octokit interface. The
- * webhook handler (Milestone B) wires it to Probot's `pull_request.closed`
- * events; the action's Phase B completion step (Milestone C) calls
- * `closeReleaseIssue` via the same Octokit.
+ * This module is the bot-side, Octokit-using surface. The constants and
+ * pure helpers (label name, marker codec, comment-body templates) live in
+ * `@tagline-sh/shared` so the action can reuse them when closing the issue
+ * during Phase B finalize.
  *
  * State is derived from GitHub on demand — no local persistence. The bot
  * recognizes "its" issue by the combination of (1) a stable label name and
@@ -18,28 +33,11 @@ import type { RepoRef } from '~/app/services/github-reader';
  * stripped by editors); both together are reliable.
  */
 
-/** Label every Tagline release-tracking issue carries. */
-export const RELEASE_ISSUE_LABEL = 'tagline:release-pending';
-
-/**
- * Color of the label, in 6-char hex without leading `#`. Mid-blue, matches
- * the Action's planned Marketplace branding.
- */
-const RELEASE_ISSUE_LABEL_COLOR = '0E8A16';
-const RELEASE_ISSUE_LABEL_DESCRIPTION =
-    'Tagline tracks merged PRs in this issue until the next release ships.';
-
-const MARKER_START = '<!-- tagline-issue-v1';
-const MARKER_END = '-->';
-
-export interface ReleaseIssueMarker {
-    /** Schema version. Bump when the marker JSON shape changes incompatibly. */
-    v: 1;
-    /** Production branch this issue tracks (the one we watch for merges). */
-    branch: string;
-    /** Last release tag at issue-open time. Informational; recomputed at render time. */
-    lastTag: string | null;
-}
+// Re-export the shared constants + types for backward compatibility with
+// existing bot imports (handlers, tests). The local `encodeMarker` and
+// `extractMarker` aliases above are re-exported separately so both names
+// remain importable from this module.
+export { RELEASE_ISSUE_LABEL, encodeMarker, extractMarker, type ReleaseIssueMarker };
 
 export interface ReleaseIssue {
     number: number;
@@ -117,49 +115,9 @@ export interface ReleaseIssueOctokit {
 }
 
 // ---------------------------------------------------------------------------
-// Pure rendering + marker helpers (no Octokit; trivially testable)
+// Pure rendering helpers (no Octokit; trivially testable). Marker codec lives
+// in `@tagline-sh/shared` so the action can reuse it from Phase B.
 // ---------------------------------------------------------------------------
-
-export function encodeMarker(marker: ReleaseIssueMarker): string {
-    // Plain JSON inside the HTML comment. The marker is tiny (~80 chars) so
-    // base64 buys nothing; a JSON-shaped marker is also easier to debug from
-    // the GitHub UI by anyone reading raw issue source.
-    return `${MARKER_START} ${JSON.stringify(marker)} ${MARKER_END}`;
-}
-
-/**
- * Pull the Tagline marker out of an issue body, if present. Returns `null`
- * for any failure mode (no marker, malformed JSON, unsupported version).
- * Callers treat `null` as "this is not a Tagline issue."
- */
-export function extractMarker(body: string | null | undefined): ReleaseIssueMarker | null {
-    if (!body) return null;
-    const start = body.indexOf(MARKER_START);
-    if (start === -1) return null;
-    const after = start + MARKER_START.length;
-    const end = body.indexOf(MARKER_END, after);
-    if (end === -1) return null;
-    const json = body.slice(after, end).trim();
-    try {
-        const parsed = JSON.parse(json) as unknown;
-        if (
-            !parsed ||
-            typeof parsed !== 'object' ||
-            (parsed as { v?: unknown }).v !== 1 ||
-            typeof (parsed as { branch?: unknown }).branch !== 'string'
-        ) {
-            return null;
-        }
-        const marker = parsed as ReleaseIssueMarker;
-        return {
-            v: 1,
-            branch: marker.branch,
-            lastTag: marker.lastTag ?? null,
-        };
-    } catch {
-        return null;
-    }
-}
 
 export interface RenderReleaseIssueArgs {
     branch: string;
@@ -206,10 +164,14 @@ export function renderReleaseIssueBody(args: RenderReleaseIssueArgs): string {
     lines.push('');
     lines.push('| Command | Effect |');
     lines.push('|---|---|');
-    lines.push('| `/release-report` | Preview the release: changelog, plain-language summary, suggested bump. |');
+    lines.push(
+        '| `/release-report` | Preview the release: changelog, plain-language summary, suggested bump. |',
+    );
     lines.push('| `/release-report --branch staging` | Preview against a non-production branch. |');
     lines.push('| `/approve` | Ship with the suggested bump. |');
-    lines.push('| `/approve patch \\| minor \\| major` | Force a semver bump category (semver scheme only). |');
+    lines.push(
+        '| `/approve patch \\| minor \\| major` | Force a semver bump category (semver scheme only). |',
+    );
     lines.push('| `/approve as 2026.6.0` | Ship with an explicit version string. |');
     lines.push('| `/approve --draft` | Create the GitHub Release as a draft. |');
     lines.push('| `/approve --dry-run` | Simulate everything without making changes. |');
@@ -353,9 +315,6 @@ export interface CloseReleaseIssueArgs {
 }
 
 /**
- * Phase B completion path. Posts a "Released!" comment with the release URL
- * and the plain-language summary, removes the label, then closes the issue.
- *
  * Order matters: comment first so the closing event in the issue timeline
  * sits directly after the success message. Label removal before close also
  * means a subsequent `findOpenReleaseIssue` lookup correctly returns `null`
@@ -366,7 +325,11 @@ export async function closeReleaseIssue(
     repo: RepoRef,
     args: CloseReleaseIssueArgs,
 ): Promise<void> {
-    const body = buildClosingCommentBody(args);
+    const body = buildReleaseIssueClosingCommentBody({
+        tagName: args.tagName,
+        releaseUrl: args.releaseUrl,
+        readyToShareMarkdown: args.readyToShareMarkdown,
+    });
     await octokit.rest.issues.createComment({
         owner: repo.owner,
         repo: repo.repo,
@@ -393,18 +356,17 @@ export async function closeReleaseIssue(
     });
 }
 
+/**
+ * @deprecated Re-exported from `@tagline-sh/shared` as
+ * `buildReleaseIssueClosingCommentBody`. Kept here under the local name for
+ * existing test imports.
+ */
 export function buildClosingCommentBody(args: CloseReleaseIssueArgs): string {
-    const lines: string[] = [];
-    lines.push(`Released \`${args.tagName}\` 🎉`);
-    lines.push('');
-    lines.push(`Release: ${args.releaseUrl}`);
-    lines.push('');
-    lines.push('---');
-    lines.push('');
-    lines.push('**Ready to share:**');
-    lines.push('');
-    lines.push(args.readyToShareMarkdown.trimEnd());
-    return lines.join('\n');
+    return buildReleaseIssueClosingCommentBody({
+        tagName: args.tagName,
+        releaseUrl: args.releaseUrl,
+        readyToShareMarkdown: args.readyToShareMarkdown,
+    });
 }
 
 function isStatusError(err: unknown, status: number): boolean {

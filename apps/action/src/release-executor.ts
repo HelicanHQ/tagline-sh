@@ -1,5 +1,8 @@
 import * as core from '@actions/core';
 import {
+    RELEASE_ISSUE_LABEL,
+    buildReleaseIssueClosingCommentBody,
+    buildReleaseIssueMonorepoClosingCommentBody,
     releaseBranchName,
     releaseTagName,
     type ReleasePlan,
@@ -53,12 +56,39 @@ export interface PullLookupOctokit {
     };
 }
 
+/**
+ * Octokit endpoints used by Phase B to close the release-tracking issue:
+ * comment, drop the `tagline:release-pending` label, then mark the issue
+ * closed. The bot's `release-issue.ts` service does the same dance from
+ * the opposite end (issue creation + updates on PR merges); both ends use
+ * the shared label constant and shared body templates so they can't drift.
+ */
+export interface ReleaseIssueCloserOctokit {
+    rest: {
+        issues: {
+            removeLabel: (params: {
+                owner: string;
+                repo: string;
+                issue_number: number;
+                name: string;
+            }) => Promise<unknown>;
+            update: (params: {
+                owner: string;
+                repo: string;
+                issue_number: number;
+                state?: 'open' | 'closed';
+            }) => Promise<unknown>;
+        };
+    };
+}
+
 /** Octokit intersection used across both phases. */
 export type ExecutorOctokit = ReleaseOctokit &
     OpenPROctokit &
     CommentOctokit &
     TagMergeOctokit &
-    PullLookupOctokit;
+    PullLookupOctokit &
+    ReleaseIssueCloserOctokit;
 
 export interface ExecutorDeps {
     octokit: ExecutorOctokit;
@@ -308,7 +338,12 @@ export async function executeFinalizeRelease(
         core.info(`  created: [${tagged.created.join(', ')}] skipped: [${tagged.skipped.join(', ')}]`);
 
         core.info(`Step 2/3: Creating ${payload.tags.length} GitHub Release(s)`);
-        const releaseUrls: string[] = [];
+        // `releaseUrls` is always the same length as `payload.tags`. On the
+        // idempotent "release already exists" branch we push `null` (not
+        // `continue`-skip) so downstream consumers — notably the monorepo
+        // close-comment template — can pair each tag with its URL or render
+        // an "already released" line where the URL is missing.
+        const releaseUrls: Array<string | null> = [];
         for (let i = 0; i < payload.tags.length; i += 1) {
             const tag = payload.tags[i]!;
             const body = payload.releaseBodies[i] ?? '';
@@ -331,22 +366,36 @@ export async function executeFinalizeRelease(
                 const message = err instanceof Error ? err.message : String(err);
                 if (/already_exists|already exists/i.test(message)) {
                     core.info(`  ${tag} → release already exists, skipping`);
+                    releaseUrls.push(null);
                     continue;
                 }
                 throw err;
             }
         }
 
-        core.info(`Step 3/3: Commenting on PR #${input.prNumber}`);
-        await tryPostFinalizeComment({
-            octokit: deps.octokit,
-            repoOwner: input.repoOwner,
-            repoName: input.repoName,
-            prNumber: input.prNumber,
-            tags: payload.tags,
-            releaseUrls,
-            summaryMarkdown: payload.summaryMarkdown,
-        });
+        // Step 3 (v0.2): close the release-tracking issue with a "Released!"
+        // comment + label removal + state: closed. Under the new venue model
+        // the originating issue carried by `payload.issueNumber` IS the
+        // bot-managed release issue (because /approve is only accepted there).
+        // We deliberately do NOT also comment on the merged release PR — one
+        // canonical venue, no duplicate notifications.
+        if (payload.issueNumber > 0) {
+            core.info(`Step 3/3: Closing release issue #${payload.issueNumber}`);
+            await tryCloseReleaseIssue({
+                octokit: deps.octokit,
+                repoOwner: input.repoOwner,
+                repoName: input.repoName,
+                issueNumber: payload.issueNumber,
+                tags: payload.tags,
+                releaseUrls,
+                summaryMarkdown: payload.summaryMarkdown,
+            });
+        } else {
+            // Dry-run path and legacy plans (pre-venue-pivot) can ship with
+            // `issueNumber: 0`. Skip silently — there is no canonical issue
+            // to close.
+            core.info('Step 3/3: skipping release-issue close (no issue number in plan)');
+        }
 
         const primaryTag = payload.tags[0] ?? releaseTagName(payload.nextVersion);
         const primaryUrl = releaseUrls[0] ?? null;
@@ -415,41 +464,91 @@ async function tryPostCompletion(
     }
 }
 
-async function tryPostFinalizeComment(args: {
+/**
+ * Phase B close-out for the release-tracking issue: post a "Released! 🎉"
+ * comment with the "Ready to share" summary, then drop the
+ * `tagline:release-pending` label, then mark the issue closed.
+ *
+ * Order matters: comment first so the closing event in the issue timeline
+ * sits directly after the success message. Label removal before close also
+ * lets `findOpenReleaseIssue` correctly return `null` even if the close
+ * itself has not propagated yet.
+ *
+ * Every step is best-effort — the release itself has already happened by
+ * this point, so we never let an issue-close failure mask a successful
+ * publish. Each error becomes a `core.warning` (visible in the workflow
+ * sidebar) and execution continues.
+ */
+async function tryCloseReleaseIssue(args: {
     octokit: ExecutorOctokit;
     repoOwner: string;
     repoName: string;
-    prNumber: number;
+    issueNumber: number;
     tags: string[];
-    releaseUrls: string[];
+    releaseUrls: Array<string | null>;
     summaryMarkdown: string;
 }): Promise<void> {
-    const lines: string[] = [];
-    if (args.tags.length === 1) {
-        lines.push(`Released \`${args.tags[0]}\` 🎉`);
-    } else {
-        lines.push(`Released ${args.tags.length} packages 🎉`);
-    }
-    lines.push('');
-    for (let i = 0; i < args.tags.length; i += 1) {
-        const url = args.releaseUrls[i];
-        if (url) lines.push(`- \`${args.tags[i]}\` → ${url}`);
-    }
-    lines.push('');
-    lines.push('---');
-    lines.push('');
-    lines.push('**Ready to share:**');
-    lines.push('');
-    lines.push(args.summaryMarkdown.trimEnd());
+    const body =
+        args.tags.length === 1
+            ? buildReleaseIssueClosingCommentBody({
+                  tagName: args.tags[0]!,
+                  releaseUrl: args.releaseUrls[0] ?? '',
+                  readyToShareMarkdown: args.summaryMarkdown,
+              })
+            : buildReleaseIssueMonorepoClosingCommentBody({
+                  tags: args.tags,
+                  releaseUrls: args.releaseUrls,
+                  readyToShareMarkdown: args.summaryMarkdown,
+              });
+
+    let commented = false;
     try {
         await args.octokit.rest.issues.createComment({
             owner: args.repoOwner,
             repo: args.repoName,
-            issue_number: args.prNumber,
-            body: lines.join('\n'),
+            issue_number: args.issueNumber,
+            body,
+        });
+        commented = true;
+    } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        core.warning(
+            `Could not post release-issue completion comment on #${args.issueNumber}: ${message}. ` +
+                'If you see "Resource not accessible by integration", add `issues: write` to your workflow permissions.',
+        );
+    }
+
+    try {
+        await args.octokit.rest.issues.removeLabel({
+            owner: args.repoOwner,
+            repo: args.repoName,
+            issue_number: args.issueNumber,
+            name: RELEASE_ISSUE_LABEL,
         });
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        core.warning(`Could not post finalize comment: ${message}.`);
+        // 404 is idempotent (label already gone). Anything else is a real
+        // failure we surface as a warning — but we still try to close.
+        if (!/already_exists|not.?found|404/i.test(message)) {
+            core.warning(
+                `Could not remove label \`${RELEASE_ISSUE_LABEL}\` from #${args.issueNumber}: ${message}.`,
+            );
+        }
+    }
+
+    try {
+        await args.octokit.rest.issues.update({
+            owner: args.repoOwner,
+            repo: args.repoName,
+            issue_number: args.issueNumber,
+            state: 'closed',
+        });
+    } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        core.warning(`Could not close release issue #${args.issueNumber}: ${message}.`);
+    }
+
+    if (commented) {
+        core.info(`  closed release issue #${args.issueNumber}`);
     }
 }

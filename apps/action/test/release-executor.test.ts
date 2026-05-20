@@ -19,6 +19,8 @@ function fakeOctokit(): {
         createPR: ReturnType<typeof vi.fn>;
         createComment: ReturnType<typeof vi.fn>;
         createRef: ReturnType<typeof vi.fn>;
+        updateIssue: ReturnType<typeof vi.fn>;
+        removeLabel: ReturnType<typeof vi.fn>;
     };
 } {
     const calls = {
@@ -30,12 +32,18 @@ function fakeOctokit(): {
         })),
         createComment: vi.fn(async () => ({ data: { html_url: 'comment-url' } })),
         createRef: vi.fn(async (params: { ref: string }) => ({ data: { ref: params.ref } })),
+        updateIssue: vi.fn(async () => ({ data: {} })),
+        removeLabel: vi.fn(async () => ({})),
     };
     const octokit = {
         rest: {
             repos: { createRelease: calls.createRelease },
             pulls: { create: calls.createPR },
-            issues: { createComment: calls.createComment },
+            issues: {
+                createComment: calls.createComment,
+                update: calls.updateIssue,
+                removeLabel: calls.removeLabel,
+            },
             git: { createRef: calls.createRef },
         },
     } as unknown as ExecutorOctokit;
@@ -151,14 +159,14 @@ describe('executeProposeRelease — happy path (Phase A)', () => {
 });
 
 describe('executeFinalizeRelease — happy path (Phase B)', () => {
-    function makePRBody(): string {
+    function makePRBody(issueNumber = 88): string {
         const payload = encodeFinalizePlan({
             nextVersion: '1.5.0',
             tags: ['v1.5.0'],
             releaseBodies: ['## v1.5.0\n\nReleased!'],
             releaseNames: ['v1.5.0'],
             draft: false,
-            issueNumber: 0,
+            issueNumber,
             summaryMarkdown: "## What's new in v1.5.0\n\n- Added the new thing",
         });
         return [
@@ -174,15 +182,15 @@ describe('executeFinalizeRelease — happy path (Phase B)', () => {
         ].join('\n');
     }
 
-    it('creates the tag at the merge SHA, creates the GitHub Release, comments on the PR', async () => {
+    it('creates the tag, publishes the GitHub Release, and closes the release issue (not the merged PR)', async () => {
         const { octokit, calls } = fakeOctokit();
         const result = await executeFinalizeRelease(
             {
                 repoOwner: 'acme',
                 repoName: 'widget',
                 mergeSha: 'merge-sha-deadbeef',
-                prNumber: 42,
-                prBody: makePRBody(),
+                prNumber: 42, // the merged release PR — Phase B comments here in old model, NOT in v0.2
+                prBody: makePRBody(88), // issueNumber=88 = the release-tracking issue
                 headRef: 'release/v1.5.0',
             },
             { octokit, workspaceRoot: '/tmp' },
@@ -206,14 +214,76 @@ describe('executeFinalizeRelease — happy path (Phase B)', () => {
         expect(relCall.tag_name).toBe('v1.5.0');
         expect(relCall.body).toContain('Released!');
 
-        // Completion comment posted on the merged PR (issue_number=42).
+        // Completion comment posted on the RELEASE ISSUE (#88), NOT on the merged PR (#42).
         const commentCall = calls.createComment.mock.calls[0]?.[0] as {
             issue_number: number;
             body: string;
         };
-        expect(commentCall.issue_number).toBe(42);
+        expect(commentCall.issue_number).toBe(88);
         expect(commentCall.body).toContain('Released `v1.5.0` 🎉');
         expect(commentCall.body).toContain('Ready to share');
+
+        // Label removed from the release issue.
+        expect(calls.removeLabel).toHaveBeenCalledWith({
+            owner: 'acme',
+            repo: 'widget',
+            issue_number: 88,
+            name: 'tagline:release-pending',
+        });
+
+        // Release issue closed.
+        const updateCall = calls.updateIssue.mock.calls[0]?.[0] as {
+            issue_number: number;
+            state: string;
+        };
+        expect(updateCall.issue_number).toBe(88);
+        expect(updateCall.state).toBe('closed');
+    });
+
+    it('skips the release-issue close step when issueNumber=0 (dry-run / legacy plan)', async () => {
+        const { octokit, calls } = fakeOctokit();
+        const result = await executeFinalizeRelease(
+            {
+                repoOwner: 'acme',
+                repoName: 'widget',
+                mergeSha: 'merge-sha-deadbeef',
+                prNumber: 42,
+                prBody: makePRBody(0), // no canonical release issue
+                headRef: 'release/v1.5.0',
+            },
+            { octokit, workspaceRoot: '/tmp' },
+        );
+
+        expect(result.success).toBe(true);
+        // Release still happens (tag + GitHub Release) — only the issue-close
+        // step is skipped because there's no issue to close.
+        expect(calls.createRef).toHaveBeenCalled();
+        expect(calls.createRelease).toHaveBeenCalled();
+        expect(calls.createComment).not.toHaveBeenCalled();
+        expect(calls.removeLabel).not.toHaveBeenCalled();
+        expect(calls.updateIssue).not.toHaveBeenCalled();
+    });
+
+    it('continues to close the issue even when the comment post fails (release already published)', async () => {
+        const { octokit, calls } = fakeOctokit();
+        calls.createComment.mockRejectedValueOnce(new Error('Resource not accessible'));
+        const result = await executeFinalizeRelease(
+            {
+                repoOwner: 'acme',
+                repoName: 'widget',
+                mergeSha: 'merge-sha-deadbeef',
+                prNumber: 42,
+                prBody: makePRBody(88),
+                headRef: 'release/v1.5.0',
+            },
+            { octokit, workspaceRoot: '/tmp' },
+        );
+
+        // The release shipped successfully — comment failure is a warning, not a result failure.
+        expect(result.success).toBe(true);
+        // We still attempted to remove the label and close the issue.
+        expect(calls.removeLabel).toHaveBeenCalled();
+        expect(calls.updateIssue).toHaveBeenCalled();
     });
 
     it('fails clearly when the PR body has no plan marker (manual PR or edit)', async () => {
