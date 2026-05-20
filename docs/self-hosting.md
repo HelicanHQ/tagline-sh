@@ -49,7 +49,7 @@ Use any process supervisor (`systemd`, `pm2`, `tmux`) to keep it alive.
 
 ## Step 3 — install on your repos
 
-Use your GitHub App's install URL: `https://github.com/apps/<your-app-name>`. Pick the repos to install on. The bot will post a welcome issue with the setup checklist.
+Use your GitHub App's install URL: `https://github.com/apps/<your-app-name>`. Pick the repos to install on. The bot will open a `Configure Tagline` pull request on each — review, edit `.release-agent.md` to taste, follow the embedded workflow-file instructions, and merge.
 
 ## Operations
 

@@ -18,7 +18,7 @@ Install **Tagline** on the repo you want to release. Use either:
 - The hosted instance at `https://github.com/apps/tagline-sh` (free for OSS repos), or
 - A self-hosted instance — see [self-hosting](./self-hosting.md).
 
-When the app is installed it opens a welcome issue with a setup checklist. The welcome issue is documentation only — slash commands posted there are ignored. The bot opens a dedicated **release-tracking issue** later, once the first PR merges (see Step 5).
+When the app is installed it opens a **Configure Tagline** pull request on each repo. The PR adds a default `.release-agent.md` and the body explains the entire release flow with a copy-pasteable workflow YAML block. Merge it (after editing the config to taste) and you're set up. Slash commands posted on the Configure PR itself are ignored — the bot opens a dedicated **release-tracking issue** later, once the first feature PR merges (see Step 5).
 
 ## Step 2 — add the workflow
 
@@ -89,7 +89,7 @@ Tagline kicks off Phase A. The action opens a release PR (no tag, no GitHub Rele
 
 A new release-tracking issue opens automatically the next time a PR merges, and the cycle repeats.
 
-> **Slash commands work only on the bot-managed release-tracking issue.** Comments on any other issue or PR (including the welcome issue) are silently ignored, so the bot stays quiet on unrelated conversations.
+> **Slash commands work only on the bot-managed release-tracking issue.** Comments on any other issue or PR (including the Configure Tagline PR) are silently ignored, so the bot stays quiet on unrelated conversations.
 
 That's it.
 
