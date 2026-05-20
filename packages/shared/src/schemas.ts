@@ -122,7 +122,11 @@ export const PackageReleasePlanSchema = z.object({
     currentVersion: z.string().min(1),
     nextVersion: z.string().min(1),
     bumpType: BumpTypeSchema,
-    prs: z.array(ParsedPRSchema),
+    // `prs` is OPTIONAL in transport. The bot strips it out before
+    // workflow_dispatch (it's already baked into `changelogContent`). The
+    // action never re-reads PR data, so empty-array default is safe and
+    // shrinks the dispatch payload by 10–100× for large monorepos.
+    prs: z.array(ParsedPRSchema).default([]),
     changelogContent: z.string(),
     tagName: z.string().min(1),
 });
@@ -135,14 +139,20 @@ export const ReleasePlanSchema = z.object({
     currentVersion: z.string().min(1),
     nextVersion: z.string().min(1),
     lastTag: z.string().nullable(),
-    prs: z.array(ParsedPRSchema),
+    // OPTIONAL in transport — see PackageReleasePlanSchema.prs above. The bot
+    // sends `[]` over the wire to stay under GitHub's `workflow_dispatch`
+    // input size limit; the rendered `changelogContent` is the canonical
+    // source from this point onward.
+    prs: z.array(ParsedPRSchema).default([]),
     changelogContent: z.string(),
     // Required, not optional — the bot ALWAYS produces a summary (AI or
     // deterministic fallback). Making this nullable would let stale bot
     // builds slip a missing-summary plan past the action boundary unnoticed.
     releaseSummary: ReleaseSummarySchema,
     isMonorepo: z.boolean(),
-    monorepoInfo: MonorepoInfoSchema.nullable(),
+    // OPTIONAL in transport — large monorepoInfo with `affectedPRs` per
+    // package can dwarf the rest of the plan. The action doesn't read this.
+    monorepoInfo: MonorepoInfoSchema.nullable().default(null),
     // Per-package plans (M3). Empty array for single-repo.
     packages: z.array(PackageReleasePlanSchema),
     isDraft: z.boolean(),

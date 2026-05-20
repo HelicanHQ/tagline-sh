@@ -457,6 +457,40 @@ export interface DispatchResult {
     missingWorkflow: boolean;
     /** Set when dispatch itself errored. */
     error?: string;
+    /** Size of the serialized release_plan input, in bytes (UTF-8). */
+    payloadBytes?: number;
+}
+
+/**
+ * GitHub `workflow_dispatch` caps a single input at ~65 KB. We use 60 KB as
+ * the soft limit so we fail with our OWN error message — readable, actionable
+ * — instead of GitHub's generic "inputs are too large" string. The 5 KB
+ * headroom also covers the issue_number + dry_run input bytes plus JSON
+ * encoding overhead.
+ */
+const MAX_RELEASE_PLAN_BYTES = 60_000;
+
+/**
+ * Strip `ReleasePlan` fields that the action does not consume so the JSON
+ * fits inside GitHub's workflow_dispatch input size limit.
+ *
+ * The action only reads pre-rendered artifacts (`changelogContent`,
+ * `releaseSummary`, package metadata, version info) — it never touches `prs`,
+ * `monorepoInfo`, or `packages[].prs` again after the bot built the changelog.
+ * For monorepos with many packages × many PRs × many commits with bodies,
+ * those duplicate-but-unused fields can balloon the payload by 10–100×.
+ *
+ * The corresponding zod schemas in `@tagline-sh/shared` default these fields
+ * to `[]`/`null` on parse, so a slim plan validates identically to a full one
+ * at the action boundary.
+ */
+export function slimPlanForDispatch(plan: ReleasePlan): Record<string, unknown> {
+    return {
+        ...plan,
+        prs: [],
+        monorepoInfo: null,
+        packages: plan.packages.map((p) => ({ ...p, prs: [] })),
+    };
 }
 
 /**
@@ -465,6 +499,12 @@ export interface DispatchResult {
  * Pre-flight: confirm the workflow file exists. The "missing workflow" case is
  * extremely common for first-time installs, and a setup-instructions comment
  * is far more useful than a generic "could not dispatch" failure.
+ *
+ * Size handling: the plan is slimmed (see `slimPlanForDispatch`) and the
+ * resulting bytes are checked against `MAX_RELEASE_PLAN_BYTES`. If the slim
+ * plan STILL exceeds the limit (e.g. a monorepo with very large rendered
+ * CHANGELOG entries), we surface a typed error instead of letting GitHub
+ * reject the dispatch with its less-helpful "inputs are too large" string.
  */
 export async function dispatchReleaseWorkflow(
     octokit: DispatchOctokit,
@@ -487,6 +527,24 @@ export async function dispatchReleaseWorkflow(
         };
     }
 
+    const slim = slimPlanForDispatch(plan);
+    const releasePlanJson = JSON.stringify(slim);
+    const payloadBytes = Buffer.byteLength(releasePlanJson, 'utf8');
+
+    if (payloadBytes > MAX_RELEASE_PLAN_BYTES) {
+        return {
+            dispatched: false,
+            missingWorkflow: false,
+            payloadBytes,
+            error:
+                `Release plan is ${payloadBytes} bytes after slimming, which exceeds the ` +
+                `${MAX_RELEASE_PLAN_BYTES}-byte workflow_dispatch input limit. This typically ` +
+                'happens on monorepos with many packages × many merged PRs since the last release. ' +
+                'Workaround: cut a release more often, or open an issue at ' +
+                'https://github.com/tagline-sh/tagline-sh/issues with the size + monorepo shape.',
+        };
+    }
+
     try {
         await octokit.rest.actions.createWorkflowDispatch({
             owner,
@@ -494,16 +552,17 @@ export async function dispatchReleaseWorkflow(
             workflow_id: RELEASE_WORKFLOW_FILE,
             ref: plan.baseBranch,
             inputs: {
-                release_plan: JSON.stringify(plan),
+                release_plan: releasePlanJson,
                 issue_number: String(plan.issueNumber),
                 dry_run: plan.isDryRun ? 'true' : 'false',
             },
         });
-        return { dispatched: true, missingWorkflow: false };
+        return { dispatched: true, missingWorkflow: false, payloadBytes };
     } catch (err) {
         return {
             dispatched: false,
             missingWorkflow: false,
+            payloadBytes,
             error: err instanceof Error ? err.message : String(err),
         };
     }

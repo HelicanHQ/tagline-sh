@@ -221,10 +221,15 @@ async function runApprove(
             await context.octokit.rest.issues.updateComment({
                 ...repo,
                 comment_id: ack.data.id,
-                body: errorComment('dispatching the release workflow'),
+                body: errorComment('dispatching the release workflow', dispatch.error),
             });
             return;
         }
+
+        context.log.info(
+            { payloadBytes: dispatch.payloadBytes },
+            'workflow_dispatch succeeded',
+        );
 
         await context.octokit.rest.issues.updateComment({
             ...repo,

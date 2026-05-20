@@ -89,6 +89,48 @@ describe('ReleasePlanSchema', () => {
         expect(() => ReleasePlanSchema.parse(bad)).toThrow();
     });
 
+    it('accepts a slim transport plan with prs/monorepoInfo omitted (defaults applied)', () => {
+        // The bot strips prs + monorepoInfo + packages[].prs before dispatch
+        // to fit under GitHub's workflow_dispatch input size limit. The
+        // schema must accept that shape and fill the defaults so the action
+        // sees identical structure either way.
+        const {
+            prs: _droppedPRs,
+            monorepoInfo: _droppedMRI,
+            ...slim
+        } = goodPlan;
+        const parsed = ReleasePlanSchema.parse(slim);
+        expect(parsed.prs).toEqual([]);
+        expect(parsed.monorepoInfo).toBeNull();
+        // Canonical fields the action consumes survive the slimming intact.
+        expect(parsed.changelogContent).toBe(goodPlan.changelogContent);
+        expect(parsed.releaseSummary).toEqual(goodPlan.releaseSummary);
+    });
+
+    it('accepts a slim transport plan with packages[].prs omitted (defaults applied)', () => {
+        const monorepoPlan = {
+            ...goodPlan,
+            isMonorepo: true,
+            packages: [
+                {
+                    name: '@acme/api',
+                    path: 'packages/api',
+                    packageJsonPath: 'packages/api/package.json',
+                    changelogPath: 'packages/api/CHANGELOG.md',
+                    currentVersion: '1.0.0',
+                    nextVersion: '1.1.0',
+                    bumpType: 'minor' as const,
+                    // prs intentionally omitted — the slim shape from the bot.
+                    changelogContent: '## [1.1.0]\n',
+                    tagName: '@acme/api@1.1.0',
+                },
+            ],
+        };
+        const parsed = ReleasePlanSchema.parse(monorepoPlan);
+        expect(parsed.packages[0]!.prs).toEqual([]);
+        expect(parsed.packages[0]!.changelogContent).toBe('## [1.1.0]\n');
+    });
+
     it('rejects a releaseSummary with zero highlights', () => {
         const bad = {
             ...goodPlan,

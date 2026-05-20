@@ -239,15 +239,16 @@ export function missingWorkflowComment(): string {
         '        required: false',
         '        type: boolean',
         '        default: false',
-        '  # Phase B — finalize: tags the merge commit and publishes the GitHub',
-        '  # Release once the release PR is merged. Skipped for closed-without-merge.',
-        '  pull_request:',
-        '    types: [closed]',
+        '  # Phase B — finalize: tags the merge commit + publishes the GitHub',
+        '  # Release once the release PR is merged into the production branch.',
+        '  # Triggered on `push` because PRs opened with GITHUB_TOKEN do NOT fire',
+        '  # `pull_request: closed` events (GitHub anti-recursion behavior). The',
+        '  # action self-filters and no-ops for non-release pushes.',
+        '  push:',
         '    branches: [main, master]',
         'jobs:',
         '  release:',
-        '    # Only run finalize for merges of release/* PRs; propose always runs.',
-        "    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/')) }}",
+        "    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}",
         '    runs-on: ubuntu-latest',
         '    permissions:',
         '      contents: write',
@@ -272,8 +273,16 @@ export function noPermissionComment(username: string): string {
 }
 
 /** Generic error comment shown when something unexpected blows up. */
-export function errorComment(action: string): string {
-    return `${APP_DISPLAY_NAME} hit an error while ${action}. Please try again, or check the bot logs.`;
+export function errorComment(action: string, detail?: string): string {
+    const base = `${APP_DISPLAY_NAME} hit an error while ${action}.`;
+    if (detail && detail.trim().length > 0) {
+        // Detail is shown verbatim so users get actionable info (e.g. "release
+        // plan is N bytes, exceeds the workflow_dispatch input limit"). Keep
+        // it surrounded by blockquote markers so it visually separates from
+        // the canned wrapper.
+        return `${base}\n\n> ${detail.trim().split('\n').join('\n> ')}\n\nIf this keeps happening, check the bot logs or open an issue.`;
+    }
+    return `${base} Please try again, or check the bot logs.`;
 }
 
 /** Issue body posted when the GitHub App is first installed. */

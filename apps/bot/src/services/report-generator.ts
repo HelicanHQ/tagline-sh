@@ -3,6 +3,7 @@ import {
     AI_DEFAULTS,
     buildSummaryMarkdown,
     formatSummaryDate,
+    type ParsedCommit,
     type ParsedPR,
     type ReleaseSummary,
     type RepoConfig,
@@ -33,20 +34,47 @@ export interface AIReportOutput {
 
 const SYSTEM_PROMPT =
     'You are a release manager assistant for software engineering teams. ' +
-    'You help generate clear, accurate release reports based on merged pull requests. ' +
-    'Be concise and technical. Do not embellish or invent features. ' +
-    'Only describe what is in the provided PR data.';
+    'You help generate clear, accurate release reports based on merged pull requests AND the conventional commits inside them. ' +
+    'The PR title is a high-level label; the individual commit subjects are the authoritative description of what changed. ' +
+    'Base every claim on a commit subject, a PR title, or the PR description excerpt — never invent features that are not in the provided data. ' +
+    'If the data does not explain a change, omit it rather than guessing. ' +
+    'Be concise and technical.';
+
+/**
+ * Hard cap on commits surfaced per PR in the prompt. Squash-merge repos
+ * typically have 1–3 commits per PR; merge-commit repos can have dozens. The
+ * cap keeps prompt size bounded and predictable — the AI almost never needs
+ * commit #16+ to understand the shape of a release, and an overflow line
+ * tells it explicitly that more exists.
+ */
+const MAX_COMMITS_PER_PR = 15;
+
+function formatCommitLine(c: ParsedCommit): string {
+    const scope = c.scope ? `(${c.scope})` : '';
+    const bang = c.isBreaking ? '!' : '';
+    return `    - ${c.type}${scope}${bang}: ${c.subject}`;
+}
+
+function formatPRBlock(pr: ParsedPR): string {
+    const header = `- PR #${pr.number}: ${pr.title} (by @${pr.author})`;
+    const tickets = `  Tickets: ${pr.tickets.join(', ') || 'none'}`;
+    const visible = pr.commits.slice(0, MAX_COMMITS_PER_PR);
+    const overflow = pr.commits.length - visible.length;
+    const commitLines =
+        pr.commits.length === 0
+            ? ['  Commits: (none recorded)']
+            : [
+                  '  Commits:',
+                  ...visible.map(formatCommitLine),
+                  ...(overflow > 0 ? [`    - (+ ${overflow} more commit(s) omitted)`] : []),
+              ];
+    const body = pr.bodyExcerpt ? [`  Description: ${pr.bodyExcerpt}`] : [];
+    return [header, tickets, ...commitLines, ...body].join('\n');
+}
 
 function buildUserPrompt(input: ReportGeneratorInput): string {
     const { prs, suggestedBump, suggestedVersion, config } = input;
-    const prLines = prs
-        .map((pr) => {
-            const types = pr.commits.map((c) => c.type).join(', ') || 'chore';
-            const tickets = pr.tickets.join(', ') || 'none';
-            const body = pr.bodyExcerpt ? `\n  Description: ${pr.bodyExcerpt}` : '';
-            return `- PR #${pr.number}: ${pr.title} (by @${pr.author})\n  Type: ${types}\n  Tickets: ${tickets}${body}`;
-        })
-        .join('\n');
+    const prLines = prs.map(formatPRBlock).join('\n');
 
     const style =
         config.releaseNotesStyle || 'Write clear, concise release notes for a developer audience.';
@@ -71,9 +99,9 @@ function buildUserPrompt(input: ReportGeneratorInput): string {
             : `## Computed next version: ${suggestedVersion} (scheme: ${scheme})`;
 
     return [
-        'Generate a release report summary based on these merged pull requests.',
+        'Generate a release report summary based on these merged pull requests and their conventional commits.',
         '',
-        '## Merged PRs',
+        '## Merged PRs (each PR lists the conventional commits it contains)',
         prLines,
         '',
         versionLine,
@@ -82,6 +110,8 @@ function buildUserPrompt(input: ReportGeneratorInput): string {
         style + ctx,
         '',
         '## Your task',
+        '> When describing what changed, prefer the commit subjects under each PR over the PR title — the title is just a label, the commits are the ground truth.',
+        '',
         reasoningTask,
         '2. Write a changelog preview in Keep a Changelog format (### Added, ### Fixed,',
         '   ### Changed, ### Removed sections — only include sections with content).',

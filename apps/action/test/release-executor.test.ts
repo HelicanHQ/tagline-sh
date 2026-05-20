@@ -5,7 +5,9 @@ import path from 'node:path';
 import {
     executeProposeRelease,
     executeFinalizeRelease,
+    findReleasePRForCommit,
     type ExecutorOctokit,
+    type PullLookupOctokit,
 } from '../src/release-executor.js';
 import { extractFinalizePlan, encodeFinalizePlan } from '../src/steps/open-pr.js';
 import { makePlan } from './fixtures/plan.js';
@@ -268,5 +270,130 @@ describe('executeProposeRelease — failure path', () => {
         expect(calls.createComment).toHaveBeenCalled();
         const body = calls.createComment.mock.calls[0]?.[0] as { body: string };
         expect(body.body).toContain('failed to release');
+    });
+});
+
+/**
+ * Tests for the push-driven Phase B path. Phase B is triggered by `push:
+ * [main, master]` because PRs opened with the default `GITHUB_TOKEN` never
+ * fire `pull_request: closed` events when merged — GitHub's anti-recursion
+ * behavior. `findReleasePRForCommit` is the lookup that maps a merge-commit
+ * SHA back to the release PR so we can extract the embedded plan marker.
+ */
+describe('findReleasePRForCommit', () => {
+    function lookupOctokit(prs: unknown[]): PullLookupOctokit {
+        return {
+            rest: {
+                repos: {
+                    listPullRequestsAssociatedWithCommit: vi.fn(async () => ({
+                        data: prs as Parameters<
+                            PullLookupOctokit['rest']['repos']['listPullRequestsAssociatedWithCommit']
+                        >[0] extends never
+                            ? never
+                            : Awaited<
+                                  ReturnType<
+                                      PullLookupOctokit['rest']['repos']['listPullRequestsAssociatedWithCommit']
+                                  >
+                              >['data'],
+                    })),
+                },
+            },
+        };
+    }
+
+    it('returns a finalize input for a release-PR merge whose merge_commit_sha matches', async () => {
+        const sha = 'abc123';
+        const octokit = lookupOctokit([
+            {
+                number: 31,
+                merge_commit_sha: sha,
+                merged_at: '2026-05-20T10:34:58Z',
+                head: { ref: 'release/v0.5.0' },
+                body: 'pr body here',
+            },
+        ]);
+        const result = await findReleasePRForCommit(octokit, 'acme', 'widget', sha);
+        expect(result).not.toBeNull();
+        expect(result?.mergeSha).toBe(sha);
+        expect(result?.prNumber).toBe(31);
+        expect(result?.headRef).toBe('release/v0.5.0');
+        expect(result?.prBody).toBe('pr body here');
+    });
+
+    it('returns null when the associated PR is not a release/* branch', async () => {
+        const sha = 'abc123';
+        const octokit = lookupOctokit([
+            {
+                number: 30,
+                merge_commit_sha: sha,
+                merged_at: '2026-05-20T10:33:03Z',
+                head: { ref: 'development' },
+                body: null,
+            },
+        ]);
+        const result = await findReleasePRForCommit(octokit, 'acme', 'widget', sha);
+        expect(result).toBeNull();
+    });
+
+    it('returns null when the PR exists but has not actually been merged', async () => {
+        const sha = 'abc123';
+        const octokit = lookupOctokit([
+            {
+                number: 31,
+                merge_commit_sha: sha,
+                merged_at: null, // still open / closed without merging
+                head: { ref: 'release/v0.5.0' },
+                body: 'body',
+            },
+        ]);
+        const result = await findReleasePRForCommit(octokit, 'acme', 'widget', sha);
+        expect(result).toBeNull();
+    });
+
+    it("returns null when the associated PR's merge_commit_sha is a different commit (rebase artifact)", async () => {
+        // The PRs API returns ALL PRs associated with a commit, including
+        // PRs whose merge produced a *different* commit (e.g. rebase-merge
+        // landed a different SHA). Only the PR whose `merge_commit_sha`
+        // exactly equals the push SHA is the one we should finalize.
+        const sha = 'abc123';
+        const octokit = lookupOctokit([
+            {
+                number: 31,
+                merge_commit_sha: 'def456', // a different commit
+                merged_at: '2026-05-20T10:34:58Z',
+                head: { ref: 'release/v0.5.0' },
+                body: 'body',
+            },
+        ]);
+        const result = await findReleasePRForCommit(octokit, 'acme', 'widget', sha);
+        expect(result).toBeNull();
+    });
+
+    it('returns null when the commit has no associated PRs at all (direct push)', async () => {
+        const octokit = lookupOctokit([]);
+        const result = await findReleasePRForCommit(octokit, 'acme', 'widget', 'abc123');
+        expect(result).toBeNull();
+    });
+
+    it('picks the release PR when multiple PRs are associated (e.g. a release and a backport)', async () => {
+        const sha = 'abc123';
+        const octokit = lookupOctokit([
+            {
+                number: 99,
+                merge_commit_sha: 'other-sha',
+                merged_at: '2026-05-20T09:00:00Z',
+                head: { ref: 'feature/x' },
+                body: 'feature',
+            },
+            {
+                number: 31,
+                merge_commit_sha: sha,
+                merged_at: '2026-05-20T10:34:58Z',
+                head: { ref: 'release/v0.5.0' },
+                body: 'release body',
+            },
+        ]);
+        const result = await findReleasePRForCommit(octokit, 'acme', 'widget', sha);
+        expect(result?.prNumber).toBe(31);
     });
 });

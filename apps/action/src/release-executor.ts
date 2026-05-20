@@ -26,8 +26,39 @@ import {
 } from '~/app/steps/open-pr';
 import { postCompletionComment, type CommentOctokit } from '~/app/steps/post-completion-comment';
 
+/**
+ * Octokit endpoint used by the push-event Phase B path. We can't rely on
+ * `pull_request: closed` because PRs opened by the default `GITHUB_TOKEN`
+ * (which Phase A uses) never fire `pull_request` events when merged — this
+ * is the documented GitHub Actions anti-recursion behavior. So we trigger
+ * Phase B from `push: [main, master]` and look up the merged PR ourselves.
+ */
+export interface PullLookupOctokit {
+    rest: {
+        repos: {
+            listPullRequestsAssociatedWithCommit: (params: {
+                owner: string;
+                repo: string;
+                commit_sha: string;
+            }) => Promise<{
+                data: Array<{
+                    number: number;
+                    merge_commit_sha: string | null;
+                    head: { ref: string };
+                    merged_at: string | null;
+                    body: string | null;
+                }>;
+            }>;
+        };
+    };
+}
+
 /** Octokit intersection used across both phases. */
-export type ExecutorOctokit = ReleaseOctokit & OpenPROctokit & CommentOctokit & TagMergeOctokit;
+export type ExecutorOctokit = ReleaseOctokit &
+    OpenPROctokit &
+    CommentOctokit &
+    TagMergeOctokit &
+    PullLookupOctokit;
 
 export interface ExecutorDeps {
     octokit: ExecutorOctokit;
@@ -132,6 +163,13 @@ export async function executeProposeRelease(
         const pr = await openReleasePR(plan, deps.octokit, payload);
         prUrl = pr.prUrl;
         core.info(`  ${prUrl}`);
+        // Sanity log: the release PR body MUST contain the plan marker for
+        // Phase B to know what to tag. We log presence + payload size so a
+        // future "Phase B couldn't find the marker" is debuggable from this
+        // run's log alone.
+        core.info(
+            `  embedded plan marker: tags=${payload.tags.length} draft=${payload.draft} issue=${payload.issueNumber}`,
+        );
 
         core.info(`Step 5/5: Posting acknowledgement comment`);
         await tryPostCompletion(plan, deps.octokit, {
@@ -185,6 +223,45 @@ export interface FinalizeInput {
     prBody: string | null;
     /** Fallback: head ref of the merged PR (used when the marker is missing). */
     headRef: string;
+}
+
+/**
+ * Find the release PR associated with a merge commit SHA.
+ *
+ * Phase B is driven by `push: [main, master]` because PRs opened with
+ * `GITHUB_TOKEN` never fire `pull_request: closed` events when merged. The
+ * push event hands us a commit SHA; we use this to map back to the PR that
+ * was merged and pull the embedded plan marker out of its body.
+ *
+ * Returns `null` for any push that isn't a release-PR merge — that's the
+ * majority of pushes to `main` and not an error.
+ */
+export async function findReleasePRForCommit(
+    octokit: PullLookupOctokit,
+    repoOwner: string,
+    repoName: string,
+    sha: string,
+): Promise<FinalizeInput | null> {
+    const res = await octokit.rest.repos.listPullRequestsAssociatedWithCommit({
+        owner: repoOwner,
+        repo: repoName,
+        commit_sha: sha,
+    });
+    const releasePR = res.data.find(
+        (pr) =>
+            pr.merge_commit_sha === sha &&
+            pr.merged_at !== null &&
+            pr.head.ref.startsWith('release/'),
+    );
+    if (!releasePR) return null;
+    return {
+        repoOwner,
+        repoName,
+        mergeSha: sha,
+        prNumber: releasePR.number,
+        prBody: releasePR.body,
+        headRef: releasePR.head.ref,
+    };
 }
 
 /**

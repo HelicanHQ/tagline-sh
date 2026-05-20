@@ -7,9 +7,15 @@ name: Release Agent
 #     `release/v*` branch, and opens a release PR. **No tag or GitHub Release
 #     is created in this phase** — the release is a proposal until you merge.
 #
-#   - Phase B (finalize): triggered by `pull_request: closed` when the release
-#     PR is merged. The action tags the merge commit and publishes the
-#     GitHub Release. Closing the PR without merging cancels the release.
+#   - Phase B (finalize): triggered by `push` to the production branch. When
+#     the head commit is the merge commit of a `release/v*` PR, the action
+#     tags that commit and publishes the GitHub Release. For every other
+#     push (regular feature merges), the action no-ops cleanly.
+#
+# Why `push` and not `pull_request: closed`: PRs opened with the default
+# `GITHUB_TOKEN` (which Phase A uses) do NOT fire `pull_request` events when
+# merged. This is GitHub's anti-recursion behavior. `push` events fire
+# reliably regardless of who opened the merged PR, so Phase B uses them.
 
 on:
     workflow_dispatch:
@@ -26,16 +32,17 @@ on:
                 required: false
                 type: boolean
                 default: false
-    pull_request:
-        types: [closed]
+    push:
         branches: [main, master]
 
 jobs:
     release:
-        # Phase A always runs on workflow_dispatch.
-        # Phase B only runs when a merged PR's head branch starts with `release/`
-        # — i.e. it was opened by Tagline. Closed-without-merge is a no-op.
-        if: ${{ github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/')) }}
+        # Phase A runs on workflow_dispatch. Phase B runs on every push to the
+        # production branch; the action self-filters and no-ops if the head
+        # commit isn't a release-PR merge. Skipping pure push noise in the
+        # YAML isn't possible (we'd need commit-message access), so we accept
+        # the cheap no-op runs instead.
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
         runs-on: ubuntu-latest
         permissions:
             contents: write

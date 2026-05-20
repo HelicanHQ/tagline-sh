@@ -1,7 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
+import type { ParsedPR, PackageReleasePlan } from '@tagline-sh/shared';
+import { ReleasePlanSchema } from '@tagline-sh/shared';
 import {
     dispatchReleaseWorkflow,
     parseApproveCommand,
+    slimPlanForDispatch,
     type DispatchOctokit,
 } from '../../src/commands/approve.js';
 import { makePlan } from './fixtures.js';
@@ -191,5 +194,180 @@ describe('dispatchReleaseWorkflow', () => {
         expect(r.dispatched).toBe(false);
         expect(r.missingWorkflow).toBe(false);
         expect(r.error).toContain('boom');
+    });
+});
+
+/**
+ * Regression suite for the "inputs are too large" workflow_dispatch failure
+ * surfaced on monorepos with many packages × many PRs × commit bodies. The
+ * fix slims out `prs`, `monorepoInfo`, and `packages[].prs` (data the action
+ * never reads) before serializing the plan.
+ */
+describe('dispatchReleaseWorkflow — payload slimming + size guard', () => {
+    function makeFatPR(n: number): ParsedPR {
+        // ~1.5 KB per PR — five commits, each with a long body to simulate
+        // squash-of-feature-branch shapes that contributors commonly produce.
+        return {
+            number: n,
+            title: `feat: big PR #${n} with many commits`,
+            url: `https://github.com/acme/widget/pull/${n}`,
+            author: 'contributor',
+            mergedAt: '2026-05-18T09:30:00Z',
+            commits: Array.from({ length: 5 }).map((_, i) => ({
+                type: 'feat' as const,
+                scope: 'auth',
+                subject: `commit ${i} for PR ${n}`,
+                body: 'X'.repeat(250), // realistic-ish commit body
+                isBreaking: false,
+                sha: `${n}-${i}`,
+            })),
+            tickets: [`PROJ-${n}`],
+            suggestedBump: 'minor',
+            bodyExcerpt: 'Y'.repeat(400),
+        };
+    }
+
+    function makeMonorepoPlan(packageCount: number, prsPerPackage: number) {
+        const allPRs: ParsedPR[] = [];
+        const packages: PackageReleasePlan[] = [];
+        let prNumber = 1;
+        for (let i = 0; i < packageCount; i += 1) {
+            const pkgPRs: ParsedPR[] = [];
+            for (let j = 0; j < prsPerPackage; j += 1) {
+                const pr = makeFatPR(prNumber++);
+                allPRs.push(pr);
+                pkgPRs.push(pr);
+            }
+            packages.push({
+                name: `@acme/pkg-${i}`,
+                path: `packages/pkg-${i}`,
+                packageJsonPath: `packages/pkg-${i}/package.json`,
+                changelogPath: `packages/pkg-${i}/CHANGELOG.md`,
+                currentVersion: '1.0.0',
+                nextVersion: '1.1.0',
+                bumpType: 'minor',
+                prs: pkgPRs,
+                changelogContent: `## [1.1.0]\n- bullet for pkg-${i}\n`,
+                tagName: `@acme/pkg-${i}@1.1.0`,
+            });
+        }
+        return makePlan({
+            isMonorepo: true,
+            prs: allPRs,
+            packages,
+            // monorepoInfo skipped — fixture default of null is fine; the
+            // important bloat sources are `prs` and `packages[].prs`.
+        });
+    }
+
+    it('strips prs, monorepoInfo, and packages[].prs before dispatch', () => {
+        const plan = makeMonorepoPlan(3, 4);
+        // Sanity: the full plan really does carry the duplicated PR data.
+        expect(plan.prs.length).toBeGreaterThan(0);
+        expect(plan.packages[0]!.prs.length).toBeGreaterThan(0);
+
+        const slim = slimPlanForDispatch(plan) as {
+            prs: unknown[];
+            monorepoInfo: unknown;
+            packages: Array<{ prs: unknown[] }>;
+            nextVersion: string;
+            packagesCount?: number;
+        };
+        expect(slim.prs).toEqual([]);
+        expect(slim.monorepoInfo).toBeNull();
+        for (const p of slim.packages) {
+            expect(p.prs).toEqual([]);
+        }
+        // The fields the action actually consumes survive slimming.
+        expect(slim.nextVersion).toBe(plan.nextVersion);
+        expect(slim.packages.length).toBe(plan.packages.length);
+    });
+
+    it('produces a slim payload that is dramatically smaller than the full plan', () => {
+        const plan = makeMonorepoPlan(5, 6); // 5 packages × 6 PRs × 5 commits w/ body
+        const full = Buffer.byteLength(JSON.stringify(plan), 'utf8');
+        const slim = Buffer.byteLength(JSON.stringify(slimPlanForDispatch(plan)), 'utf8');
+        // Guardrail: slim should be at least 5x smaller. In practice it's
+        // much more — this is the "we didn't accidentally regress the
+        // slimming" canary.
+        expect(slim * 5).toBeLessThan(full);
+    });
+
+    it('the action schema accepts a slimmed plan (no prs, null monorepoInfo)', () => {
+        const plan = makeMonorepoPlan(2, 3);
+        const wireJson = JSON.stringify(slimPlanForDispatch(plan));
+        // Re-parse through the action-side zod schema. Defaulting prs/monorepoInfo
+        // must let the slim shape validate identically to the full one.
+        const parsed = ReleasePlanSchema.parse(JSON.parse(wireJson));
+        expect(parsed.prs).toEqual([]);
+        expect(parsed.monorepoInfo).toBeNull();
+        for (const p of parsed.packages) {
+            expect(p.prs).toEqual([]);
+            expect(p.changelogContent.length).toBeGreaterThan(0);
+        }
+        // And the canonical fields the action consumes are still there.
+        expect(parsed.nextVersion).toBe(plan.nextVersion);
+        expect(parsed.changelogContent).toBe(plan.changelogContent);
+        expect(parsed.releaseSummary.headline).toBe(plan.releaseSummary.headline);
+    });
+
+    it('dispatch sends the slim plan and reports payload size', async () => {
+        const calls: ReturnType<typeof vi.fn>[] = [];
+        const getContent = vi.fn(async () => ({ data: { type: 'file' } }));
+        const createWorkflowDispatch = vi.fn(async () => ({}));
+        calls.push(getContent, createWorkflowDispatch);
+        const octokit: DispatchOctokit = {
+            rest: {
+                repos: { getContent },
+                actions: { createWorkflowDispatch },
+            },
+        };
+
+        const plan = makeMonorepoPlan(3, 4);
+        const result = await dispatchReleaseWorkflow(octokit, 'acme', 'widget', plan);
+        expect(result.dispatched).toBe(true);
+        expect(result.payloadBytes).toBeGreaterThan(0);
+
+        // vi.fn's tuple is inferred as `[]` when the impl has no params, so
+        // we cast the whole calls array before indexing.
+        const recordedCalls = createWorkflowDispatch.mock.calls as unknown as Array<
+            [{ inputs: Record<string, string> }]
+        >;
+        const dispatchCall = recordedCalls[0]?.[0] as { inputs: Record<string, string> };
+        const decoded = JSON.parse(dispatchCall.inputs['release_plan']!) as {
+            prs: unknown[];
+            monorepoInfo: unknown;
+            packages: Array<{ prs: unknown[] }>;
+        };
+        expect(decoded.prs).toEqual([]);
+        expect(decoded.monorepoInfo).toBeNull();
+        for (const p of decoded.packages) {
+            expect(p.prs).toEqual([]);
+        }
+    });
+
+    it('refuses to dispatch when the slim plan still exceeds the size cap', async () => {
+        // Build a plan whose RENDERED changelogContent alone is huge — that's
+        // the one big string the slimmer can't safely drop. This proves the
+        // size guard fires our typed error before GitHub rejects the call.
+        const huge = 'lorem '.repeat(15_000); // ~90 KB
+        const plan = makePlan({ changelogContent: huge });
+        const octokit: DispatchOctokit = {
+            rest: {
+                repos: {
+                    getContent: vi.fn(async () => ({ data: { type: 'file' } })),
+                },
+                actions: {
+                    createWorkflowDispatch: vi.fn(async () => {
+                        throw new Error('dispatch should never be called when over the cap');
+                    }),
+                },
+            },
+        };
+        const result = await dispatchReleaseWorkflow(octokit, 'acme', 'widget', plan);
+        expect(result.dispatched).toBe(false);
+        expect(result.missingWorkflow).toBe(false);
+        expect(result.payloadBytes).toBeGreaterThan(60_000);
+        expect(result.error).toMatch(/exceeds.*workflow_dispatch input limit/i);
     });
 });
