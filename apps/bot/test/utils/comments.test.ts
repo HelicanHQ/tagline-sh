@@ -264,4 +264,15 @@ describe('welcomeIssue', () => {
         expect(body).toContain('- [ ] Set `AI_API_KEY`');
         expect(body).toContain('/release-report');
     });
+
+    it('explains the release-tracking issue venue (v0.2 UX)', () => {
+        // The welcome issue itself is NOT a venue for slash commands. The
+        // body must direct users to the (future) release-tracking issue so
+        // they don't try commands here and silently get ignored.
+        const { body } = welcomeIssue();
+        expect(body).toContain('release-tracking issue');
+        expect(body).toContain('tagline:release-pending');
+        // Make sure the misleading "comment on any issue" copy is gone.
+        expect(body).not.toMatch(/on any issue/i);
+    });
 });

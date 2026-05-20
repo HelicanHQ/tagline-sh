@@ -1,6 +1,17 @@
 # Slash commands
 
-Tagline is driven entirely by slash commands posted as comments on **any** issue in your repo. There's no dashboard.
+Tagline is driven entirely by slash commands posted on the **bot-managed release-tracking issue**. There's no dashboard.
+
+## The release-tracking issue (the only venue)
+
+When the first PR after the last release merges into your production branch, Tagline opens an issue titled `🚀 Release pending — N change(s) since vX.Y.Z` and labels it `tagline:release-pending`. Every subsequent merge updates that same issue (title count + PR list). The issue is the bot's only conversational venue:
+
+- Slash commands posted **on this issue** are processed.
+- Slash commands posted on any other issue or PR are **silently ignored** — no error reply, no notification — so the bot stays quiet on unrelated conversations.
+
+Tagline recognises its issue by two signals together: the `tagline:release-pending` label AND a hidden HTML-comment marker in the issue body. Either signal alone is fragile (labels can be added by hand, markers can be edited out), but both together are reliable.
+
+If the release issue is deleted or closed manually, the next PR merge opens a fresh one. The bot does not remember past issues; it asks GitHub on every webhook.
 
 Every command requires the commenter to have at least **write** access to the repo (`write`, `maintain`, or `admin`). Comments from bots are ignored to prevent loops.
 
@@ -54,7 +65,7 @@ The action does the writes in your CI environment, in two phases:
 
 **Phase A (propose, on `workflow_dispatch`):** bumps `package.json`, prepends `CHANGELOG.md`, commits with `[skip ci]`, pushes a `release/vX.Y.Z` branch, and opens a PR back to your production branch. The PR body carries the plain-language summary, the technical changelog, and a hidden machine-readable plan marker that Phase B reads. **No tag is created. No GitHub Release is published.** The acknowledgement comment is updated with a `Preview (will publish on merge)` block, framing the release as a proposal.
 
-**Phase B (finalize, on `pull_request: closed`):** when you merge the release PR, the action runs again — this time triggered by the merge event. It parses the plan marker out of the PR body, creates the tag at the *merge commit* (so it lands on `main`, not on an orphan branch), publishes the GitHub Release (with the plain-language summary above the technical changelog), and comments on the merged PR with a **Ready to share** block — the summary formatted for direct paste into Slack, email, or any product-changelog tool. Closing the PR without merging cancels the release entirely.
+**Phase B (finalize, on `push` to the production branch):** when you merge the release PR, the resulting push triggers the action again. (GitHub suppresses `pull_request: closed` events on PRs the action itself opened, so we trigger on `push` and self-filter to the release-PR merge commit.) The action parses the plan marker out of the PR body, creates the tag at the *merge commit* (so it lands on `main`, not on an orphan branch), publishes the GitHub Release (with the plain-language summary above the technical changelog), posts a **Released! 🎉** comment on the release-tracking issue containing a **Ready to share** block — the summary formatted for direct paste into Slack, email, or any product-changelog tool — and then removes the `tagline:release-pending` label and closes the issue. Closing the PR without merging cancels the release entirely.
 
 ### Error cases
 

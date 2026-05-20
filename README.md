@@ -9,13 +9,19 @@ You stay in control. The bot only suggests; the action only runs on your explici
 ## How it works
 
 ```
-Lead comments /release-report
+A PR merges into your production branch
+              ↓
+       Bot opens (or updates) a release-tracking issue
+       labeled `tagline:release-pending`
+              ↓
+Lead comments /release-report ON THAT ISSUE
               ↓
        Bot reads PRs since last tag, parses commits, calls AI
               ↓
-       Bot posts formatted report with suggested bump + reasoning
+       Bot edits the report into the issue thread with the
+       suggested bump + reasoning
               ↓
-Lead comments /approve minor
+Lead comments /approve minor (still on the release issue)
               ↓
        Bot triggers workflow_dispatch with the release plan
               ↓
@@ -23,28 +29,30 @@ Lead comments /approve minor
    │  Action bumps version, writes CHANGELOG.md, pushes the     │
    │  release/vX.Y.Z branch, opens a release PR.                │
    │  NO tag, NO GitHub Release yet. Acknowledgement comment    │
-   │  goes back to the originating issue.                       │
+   │  goes back to the release-tracking issue.                  │
    └────────────────────────────────────────────────────────────┘
               ↓
 Lead reviews the PR, merges it (or closes it to cancel)
               ↓
-   ┌──── Phase B — finalize (on PR merge) ─────────────────────┐
+   ┌──── Phase B — finalize (on push to production) ───────────┐
    │  Action tags the merge commit, publishes the GitHub        │
    │  Release with the plain-language summary above the         │
-   │  technical changelog, comments "Ready to share" on the     │
-   │  merged PR.                                                │
+   │  technical changelog, posts the "Ready to share" block     │
+   │  on the release-tracking issue, and closes it.             │
    └────────────────────────────────────────────────────────────┘
 ```
 
 Nothing is tagged or published until the release PR is merged. The bot **never writes** to your repo. Only the action does, and only inside your own CI with your own `GITHUB_TOKEN`. Your branch protections and audit log stay intact.
+
+Slash commands work **only** on the bot-managed release-tracking issue (identified by the `tagline:release-pending` label plus a hidden marker in the issue body). Comments anywhere else are ignored silently — no notification spam.
 
 ## Five-minute install
 
 1. Install the [Tagline GitHub App](https://github.com/apps/tagline-sh) on a repo. (Or [self-host](./docs/self-hosting.md).)
 2. Copy [`examples/single-repo/.github/workflows/release-agent.yml`](./examples/single-repo/.github/workflows/release-agent.yml) into your repo. (Monorepo? Use [`examples/monorepo/...`](./examples/monorepo/.github/workflows/release-agent.yml) — same file.)
 3. Add an `AI_API_KEY` repo secret. Any OpenAI-compatible provider: OpenAI, OpenRouter, Groq, Ollama, Anthropic via proxy.
-4. Comment `/release-report` on any issue.
-5. Review, then comment `/approve` to ship.
+4. Merge a PR. Tagline opens a `🚀 Release pending` issue.
+5. Comment `/release-report` on that issue, then `/approve` to ship.
 
 Full walkthrough: [Getting started](./docs/getting-started.md).
 
@@ -65,7 +73,7 @@ See [slash-commands.md](./docs/slash-commands.md) for behavior, error cases, and
 
 ## Highlights
 
-- **GitHub-native UX.** Everything happens in PR/issue comments. No dashboard, no separate login.
+- **GitHub-native UX.** One canonical release-tracking issue per release cycle, opened automatically when PRs land. No dashboard, no separate login, no comments-on-random-issues confusion.
 - **AI is an enhancement, never a dependency.** Calls fail open: reports still generate deterministically from commits, with the reasoning replaced by `"AI unavailable — manual review required"`.
 - **Stateless by design.** GitHub is the state store. Git tags = last release. `.release-agent.md` = config. No database to operate.
 - **Monorepo-aware.** Auto-detects pnpm-workspaces, Turborepo, Nx, Lerna, npm/yarn workspaces. Each affected package versioned independently.
@@ -79,7 +87,7 @@ Two-component split — the bot thinks, the action writes.
 | Package | What it is |
 |---------|------------|
 | `apps/bot` | Probot GitHub App. Stateless. Reads from GitHub on demand. Posts comments. Never writes to user repos. |
-| `apps/action` | Node 20 GitHub Action. Runs in two phases: `workflow_dispatch` (propose — bump + CHANGELOG + branch + PR, no tag) and `pull_request: closed` (finalize — tag the merge commit + publish GitHub Release on merge). |
+| `apps/action` | Node 20 GitHub Action. Runs in two phases: `workflow_dispatch` (propose — bump + CHANGELOG + branch + PR, no tag) and `push` to the production branch (finalize — tag the merge commit + publish GitHub Release + close the release-tracking issue when the release PR lands). |
 | `packages/shared` | TypeScript types + zod schemas. The `ReleasePlan` contract between bot and action. |
 
 The action runs **in the user's CI**, with the user's secrets and audit log. The bot only proposes; the action only acts on explicit `/approve`.

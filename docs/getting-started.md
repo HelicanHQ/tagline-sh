@@ -18,7 +18,7 @@ Install **Tagline** on the repo you want to release. Use either:
 - The hosted instance at `https://github.com/apps/tagline-sh` (free for OSS repos), or
 - A self-hosted instance — see [self-hosting](./self-hosting.md).
 
-When the app is installed it opens a welcome issue with a setup checklist.
+When the app is installed it opens a welcome issue with a setup checklist. The welcome issue is documentation only — slash commands posted there are ignored. The bot opens a dedicated **release-tracking issue** later, once the first PR merges (see Step 5).
 
 ## Step 2 — add the workflow
 
@@ -27,7 +27,7 @@ Copy [`examples/single-repo/.github/workflows/release-agent.yml`](../examples/si
 The workflow has **two triggers**, one per release phase:
 
 - `workflow_dispatch` — fires when you `/approve`. Runs **Phase A (propose)**: bumps versions, writes CHANGELOG, opens the release PR. No tag, no GitHub Release.
-- `pull_request: closed` (on `main`/`master`) — fires when you merge the release PR. Runs **Phase B (finalize)**: tags the merge commit and publishes the GitHub Release. A guard on the job's `if:` ensures Phase B only runs for merged `release/*` PRs — closing without merging is a no-op.
+- `push` (on `main`/`master`) — fires on every push to the production branch. The action self-filters: it runs the full **Phase B (finalize)** path only when the head commit is the merge of a `release/v*` PR, and no-ops cleanly on every other push. Phase B uses `push` rather than `pull_request: closed` because GitHub's anti-recursion behavior suppresses `pull_request` events on PRs the action itself opened.
 
 Phase A is reversible (close the PR to cancel). Phase B is the publishing step. Nothing ships until you merge.
 
@@ -38,8 +38,8 @@ The workflow's `permissions:` block must grant exactly three things — these sc
 ```yaml
 permissions:
     contents: write # commit version bumps, push the release branch (Phase A), create the tag + GitHub release (Phase B)
-    pull-requests: write # open the changelog PR back to the production branch (Phase A); comment on the merged PR (Phase B)
-    issues: write # post the acknowledgement comment on the originating issue
+    pull-requests: write # open the changelog PR back to the production branch (Phase A)
+    issues: write # post the acknowledgement comment and close the release-tracking issue (Phase B)
 ```
 
 The example workflow files already include these. If you build your own workflow and see `Resource not accessible by integration` in the Actions log, you're missing one of the three — most commonly `issues: write`.
@@ -64,7 +64,9 @@ Drop a [`.release-agent.md`](./configuration.md) file in the repo root to custom
 
 ## Step 5 — your first release
 
-On any issue (including the welcome issue), comment:
+Merge a feature PR (`feat:`, `fix:`, or any conventional-commit-typed PR) into your production branch. Tagline opens an issue titled `🚀 Release pending — N change(s) since vX.Y.Z`, labeled `tagline:release-pending`. Every subsequent merge updates the same issue.
+
+That issue is **the** venue for the release. On it, comment:
 
 ```
 /release-report
@@ -72,7 +74,7 @@ On any issue (including the welcome issue), comment:
 
 The bot replies with a formatted report: PRs grouped by type, suggested bump, AI reasoning, and a changelog preview. Review it.
 
-When ready, comment:
+When ready, still on the same issue, comment:
 
 ```
 /approve            # use the suggested bump
@@ -81,9 +83,13 @@ When ready, comment:
 /approve --draft    # create as a draft release
 ```
 
-Tagline kicks off Phase A. The action opens a release PR (no tag, no GitHub Release yet) and the bot acknowledges with the PR link.
+Tagline kicks off Phase A. The action opens a release PR (no tag, no GitHub Release yet) and the bot acknowledges with the PR link on the release-tracking issue.
 
-**Review the PR.** When you merge it, Phase B fires automatically: the merge commit is tagged, the GitHub Release is published, and a finalize comment with a "Ready to share" block lands on the merged PR. Close the PR to cancel — nothing is tagged or published until merge.
+**Review the PR.** When you merge it, Phase B fires automatically: the merge commit is tagged, the GitHub Release is published, the "Ready to share" block is posted back on the release-tracking issue, and the issue is closed. Close the PR without merging to cancel — nothing is tagged or published until merge.
+
+A new release-tracking issue opens automatically the next time a PR merges, and the cycle repeats.
+
+> **Slash commands work only on the bot-managed release-tracking issue.** Comments on any other issue or PR (including the welcome issue) are silently ignored, so the bot stays quiet on unrelated conversations.
 
 That's it.
 
@@ -96,9 +102,9 @@ Every release produces **two** artifacts, both AI-written in the same call:
 
 The summary appears in three places:
 
-- **The report comment** — collapsible "Plain-language summary" section, so you can review it before approving.
+- **The report comment** — collapsible "Plain-language summary" section on the release-tracking issue, so you can review it before approving.
 - **The GitHub release body** — pinned above the technical changelog so anyone browsing the Releases page sees the readable version first.
-- **The completion comment** — under a "Ready to share" header. Copy this block into Slack, email, or your product changelog tool with zero editing.
+- **The closing comment on the release-tracking issue** — under a "Ready to share" header, posted just before the issue closes. Copy this block into Slack, email, or your product changelog tool with zero editing.
 
 If your AI provider is unavailable, the summary degrades gracefully to a minimal deterministic shape (`{N} updates since {last-tag}` with highlights drawn from PR titles). The section is always there; only the prose quality varies.
 
