@@ -1,0 +1,87 @@
+name: Check action bundle
+
+# Path-filtered smoke test for the action's tsup bundle. Fires on PRs that
+# touch the action's source, its dependencies, or its build configuration.
+#
+# Architectural note: this repo's `apps/action/dist/` is intentionally
+# gitignored — the bundle only lives in the distribution repo
+# (HelicanHQ/tagline-release-agent-action), freshly rebuilt by
+# `.github/workflows/release.yml` on every `v*` tag push. That sidesteps
+# the "developer forgot to rebuild" drift class entirely.
+#
+# What we still need to guard against is *bundler regressions* — a tsup
+# config typo, a noExternal change that drops a dep, or a new import that
+# resolves at typecheck-time but breaks at bundle-time. `ci.yml` runs the
+# full workspace build, but its failure signal is noisy for action-only
+# regressions. This workflow gives a fast, focused, action-scoped signal.
+#
+# Security note: no step in this workflow consumes user-controlled webhook
+# input (PR title, branch name, commit message, etc). All inputs are
+# repository contents under maintainer control.
+
+on:
+    pull_request:
+        paths:
+            - 'apps/action/**'
+            - 'packages/shared/**'
+            - 'pnpm-lock.yaml'
+            - '.github/workflows/check-dist.yml'
+
+permissions:
+    contents: read
+
+jobs:
+    bundle-smoke:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Set up pnpm
+              uses: pnpm/action-setup@v4
+              with:
+                  version: 10.22.0
+
+            - name: Set up Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '24'
+                  cache: 'pnpm'
+
+            - name: Install
+              run: pnpm install --frozen-lockfile
+
+            - name: Build action bundle
+              # `...` walks the workspace dep graph — builds @tagline-sh/shared
+              # first so the action build can resolve its workspace import.
+              run: pnpm --filter @tagline-sh/action... build
+
+            - name: Verify bundle output
+              # A misconfigured tsup or a broken `noExternal` can produce a
+              # near-empty index.js that still passes typecheck and tests
+              # (tests never load the bundled output). The 100 KB floor is
+              # a sanity check — the production bundle is ~1.3 MB because
+              # every dependency is inlined; anything under 100 KB means
+              # something material is missing.
+              run: |
+                  test -s apps/action/dist/index.js
+                  SIZE=$(wc -c < apps/action/dist/index.js)
+                  echo "Bundle size: ${SIZE} bytes"
+                  if [ "${SIZE}" -lt 102400 ]; then
+                      echo "::error::Bundle is suspiciously small (${SIZE} bytes < 100 KB floor). Likely a tsup misconfiguration."
+                      exit 1
+                  fi
+
+            - name: Set up Node 20 (action runtime)
+              # action.yml pins `runs.using: node20`, and tsup.config.ts
+              # targets node20. Confirm the bundled CJS actually parses
+              # under that exact runtime — catches syntax regressions
+              # from a wrong `target` setting before consumers hit them.
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '20'
+
+            - name: Parse-check the bundle under Node 20
+              # We only care that the JS *parses* — actually running the
+              # bundle would error on missing @actions/core inputs. Use
+              # `--check` to validate syntax without execution.
+              run: node --check apps/action/dist/index.js
