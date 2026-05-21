@@ -35,6 +35,33 @@ docker compose up -d --build
 
 The container listens on port 3000 by default. Front it with your reverse proxy of choice (Caddy, nginx, Traefik) terminated with HTTPS, since GitHub webhooks require a public HTTPS endpoint.
 
+### With Railway
+
+Railway is the recommended hosted target — Tagline ships a [`railway.json`](../railway.json) that points at the same `Dockerfile`, so you get the same multi-stage build the Compose path uses, with a managed TLS endpoint and zero infrastructure to operate.
+
+1. **Fork or clone** this repo into your own GitHub account or organisation.
+2. **Create a Railway project** at <https://railway.app/new> → "Deploy from GitHub repo" → pick your fork. Railway will detect `railway.json` and use the Dockerfile.
+3. **Set the variables** in the Railway project's **Variables** tab:
+
+    | Variable | Value |
+    |----------|-------|
+    | `APP_ID` | From your GitHub App settings page |
+    | `PRIVATE_KEY` | Paste the full PEM **including** the `-----BEGIN/END-----` lines. Railway's variable input accepts multi-line values verbatim — no escaping, no `\n` substitution. |
+    | `WEBHOOK_SECRET` | The 32+ random byte string you registered with the GitHub App |
+    | `AI_API_KEY` | Your OpenAI-compatible API key (OpenRouter, OpenAI, Groq, etc.) |
+    | `AI_BASE_URL` *(optional)* | Defaults to `https://openrouter.ai/api/v1`. Override per provider — see [BYOK for the AI](#byok-for-the-ai). |
+    | `AI_MODEL` *(optional)* | Defaults to `openai/gpt-4o-mini`. |
+    | `LOG_LEVEL` *(optional)* | `info` in steady state; `debug` while bringing up. |
+
+    Do **not** set `PRIVATE_KEY_PATH` on Railway — that path is the Docker Compose secret-file convention. Railway has no file-mount primitive, so the bot reads the PEM straight from `PRIVATE_KEY`. Setting both will cause `PRIVATE_KEY_PATH` to win and break startup.
+
+4. **Generate a public domain** under the service's **Settings → Networking → Generate Domain**. Copy the resulting `https://<your-app>.up.railway.app` URL.
+5. **Point the GitHub App webhook** at `<railway-url>/api/github/webhooks` (Settings → your App → Webhook URL).
+6. **Verify the deploy.** Railway probes `/ping` (configured in `railway.json`) — Probot's built-in liveness route returns `PONG` with HTTP 200. Once that responds, the deploy goes live. Tail logs via `railway logs` or the dashboard; you should see `INFO: Listening on http://:3000`.
+7. **Send a test webhook delivery** from the GitHub App's "Advanced" tab and confirm a 2xx response within ~5 seconds. GitHub abandons webhooks that don't ack in 10s.
+
+The Dockerfile's restart policy is governed by `railway.json` (`ON_FAILURE`, max 10 retries) — a crash loop stops after 10 attempts instead of churning indefinitely.
+
 ### Without Docker
 
 ```bash

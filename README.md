@@ -2,7 +2,7 @@
 
 > GitHub-native release-management agent. Automates the **thinking step** of releasing, not just the mechanics.
 
-Most release tools (semantic-release, changesets) automate what happens *after* you decide to release. Tagline closes the gap before that decision: it reads merged PRs since your last tag, understands conventional commits, generates a human-readable report with an AI-reasoned version bump suggestion, and — once you `/approve` — runs the release end-to-end.
+Most release tools (semantic-release, changesets) automate what happens _after_ you decide to release. Tagline closes the gap before that decision: it reads merged PRs since your last tag, understands conventional commits, generates a human-readable report with an AI-reasoned version bump suggestion, and — once you `/approve` — runs the release end-to-end.
 
 You stay in control. The bot only suggests; the action only runs on your explicit approval.
 
@@ -78,17 +78,17 @@ See [slash-commands.md](./docs/slash-commands.md) for behavior, error cases, and
 - **Stateless by design.** GitHub is the state store. Git tags = last release. `.release-agent.md` = config. No database to operate.
 - **Monorepo-aware.** Auto-detects pnpm-workspaces, Turborepo, Nx, Lerna, npm/yarn workspaces. Each affected package versioned independently.
 - **BYOK.** OpenAI-compatible API. Override `AI_BASE_URL` and `AI_MODEL` for any provider; default is OpenRouter + `gpt-4o-mini` for cost.
-- **MIT licensed.** CLI and Action are free forever. Hosted GitHub App is free for OSS; paid for private repos (post-MVP).
+- **MIT licensed, self-host first-class.** The Action and the bot are both MIT. A hosted GitHub App is available, but every install can pivot to self-hosting on its own infrastructure without code changes — see [self-hosting](./docs/self-hosting.md).
 
 ## Architecture
 
 Two-component split — the bot thinks, the action writes.
 
-| Package | What it is |
-|---------|------------|
-| `apps/bot` | Probot GitHub App. Stateless. Reads from GitHub on demand. Posts comments. Never writes to user repos. |
-| `apps/action` | Node 20 GitHub Action. Runs in two phases: `workflow_dispatch` (propose — bump + CHANGELOG + branch + PR, no tag) and `push` to the production branch (finalize — tag the merge commit + publish GitHub Release + close the release-tracking issue when the release PR lands). |
-| `packages/shared` | TypeScript types + zod schemas. The `ReleasePlan` contract between bot and action. |
+| Package           | What it is                                                                                                                                                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `apps/bot`        | Probot GitHub App. Stateless. Reads from GitHub on demand. Posts comments. Never writes to user repos.                                                                                                                                                                         |
+| `apps/action`     | Node 20 GitHub Action. Runs in two phases: `workflow_dispatch` (propose — bump + CHANGELOG + branch + PR, no tag) and `push` to the production branch (finalize — tag the merge commit + publish GitHub Release + close the release-tracking issue when the release PR lands). |
+| `packages/shared` | TypeScript types + zod schemas. The `ReleasePlan` contract between bot and action.                                                                                                                                                                                             |
 
 The action runs **in the user's CI**, with the user's secrets and audit log. The bot only proposes; the action only acts on explicit `/approve`.
 
@@ -117,7 +117,7 @@ Bot dev requires a personal GitHub App + smee.io webhook proxy — see [`apps/bo
 
 ## Roadmap
 
-This repo ships the MVP. Post-validation roadmap (from `PLAN.md §24`):
+This repo ships the MVP. Post-validation roadmap:
 
 - JIRA / Linear API enrichment of ticket refs
 - Slack / Teams / Discord release notifications
@@ -125,6 +125,12 @@ This repo ships the MVP. Post-validation roadmap (from `PLAN.md §24`):
 - GitLab / Bitbucket support
 - Independent versioning per monorepo package
 - Rollback monitoring + post-release health checks
+
+## A note on the hosted instance
+
+The hosted GitHub App is a convenience, not a commitment. It's operated on best-effort basis by the maintainer and may evolve, pause, or sunset based on maintenance load and operational reality. **The self-hosted path is the durable one** — the Action runs entirely inside your CI with your secrets, and the bot is a stateless Node server you can stand up on Railway, Fly, Render, or any Docker host in under fifteen minutes. If the hosted instance ever retires, every Tagline install can switch to self-hosted with a webhook URL change and zero data migration (there is no database).
+
+This shapes the product: features that would only work on a hosted plane (cross-repo analytics dashboards, account-level billing, multi-tenant queues) are deliberately out of scope. Everything Tagline does, it does inside the boundary of a single GitHub repo, so self-hosting one bot per team or per organisation is genuinely sufficient.
 
 ## License
 
