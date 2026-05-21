@@ -103,6 +103,62 @@ jobs:
                   cp apps/action/dist/index.js dist-repo/dist/index.js
                   cp apps/action/action.yml dist-repo/action.yml
 
+            - name: Stage LICENSE + rendered README into distribution repo
+              # Keep README + LICENSE in lockstep with the released bundle.
+              # The template lives in the source repo (apps/action/dist-readme-template.md)
+              # as the single source of truth; we render placeholders here and
+              # copy the result alongside the bundle so anyone who lands on the
+              # distribution repo gets version-accurate orientation.
+              env:
+                  TAG: ${{ github.ref_name }}
+                  SOURCE_REPO: ${{ github.repository }}
+              run: |
+                  cp LICENSE dist-repo/LICENSE
+
+                  SOURCE_REPO_URL="https://github.com/${SOURCE_REPO}"
+                  SOURCE_RELEASE_URL="${SOURCE_REPO_URL}/releases/tag/${TAG}"
+                  SOURCE_README_URL="${SOURCE_REPO_URL}#readme"
+                  SOURCE_ISSUES_URL="${SOURCE_REPO_URL}/issues"
+                  SOURCE_SECURITY_URL="${SOURCE_REPO_URL}/blob/main/docs/security.md"
+                  SOURCE_SELF_HOSTING_URL="${SOURCE_REPO_URL}/blob/main/docs/self-hosting.md"
+                  SOURCE_RELEASES_URL="${SOURCE_REPO_URL}/releases"
+                  SOURCE_LICENSE_URL="${SOURCE_REPO_URL}/blob/main/LICENSE"
+                  SOURCE_RELEASE_WORKFLOW_URL="${SOURCE_REPO_URL}/blob/main/.github/workflows/release.yml"
+                  ACTION_REF="${DIST_OWNER}/${DIST_REPO_NAME}"
+                  APP_INSTALL_URL="https://github.com/apps/tagline-sh"
+                  VERSION="${TAG#v}"
+
+                  # `|` as sed delimiter — URLs contain `/` so we cannot use
+                  # the default. None of the substitution values contain `|`.
+                  sed \
+                      -e "s|{{SOURCE_REPO}}|${SOURCE_REPO}|g" \
+                      -e "s|{{SOURCE_REPO_URL}}|${SOURCE_REPO_URL}|g" \
+                      -e "s|{{TAG}}|${TAG}|g" \
+                      -e "s|{{VERSION}}|${VERSION}|g" \
+                      -e "s|{{SOURCE_RELEASE_URL}}|${SOURCE_RELEASE_URL}|g" \
+                      -e "s|{{SOURCE_README_URL}}|${SOURCE_README_URL}|g" \
+                      -e "s|{{SOURCE_ISSUES_URL}}|${SOURCE_ISSUES_URL}|g" \
+                      -e "s|{{SOURCE_SECURITY_URL}}|${SOURCE_SECURITY_URL}|g" \
+                      -e "s|{{SOURCE_SELF_HOSTING_URL}}|${SOURCE_SELF_HOSTING_URL}|g" \
+                      -e "s|{{SOURCE_RELEASES_URL}}|${SOURCE_RELEASES_URL}|g" \
+                      -e "s|{{SOURCE_LICENSE_URL}}|${SOURCE_LICENSE_URL}|g" \
+                      -e "s|{{SOURCE_RELEASE_WORKFLOW_URL}}|${SOURCE_RELEASE_WORKFLOW_URL}|g" \
+                      -e "s|{{ACTION_REF}}|${ACTION_REF}|g" \
+                      -e "s|{{APP_INSTALL_URL}}|${APP_INSTALL_URL}|g" \
+                      apps/action/dist-readme-template.md > dist-repo/README.md
+
+                  # Fail loudly if any placeholder slipped through — better
+                  # to fail the release than ship a README with template
+                  # literals visible to consumers. The regex is scoped to
+                  # the {{NAME}} shape (uppercase + underscores) so GitHub
+                  # Actions expressions in the README's example workflow
+                  # block — which consumers are meant to copy verbatim —
+                  # do not trip the check.
+                  if grep -E '\{\{[A-Z_]+\}\}' dist-repo/README.md; then
+                      echo "::error::Unsubstituted placeholders remain in rendered README. Add the missing substitution to release.yml."
+                      exit 1
+                  fi
+
             - name: Commit + tag the distribution repo
               working-directory: dist-repo
               env:
@@ -118,7 +174,7 @@ jobs:
                   # vX.Y.Z → vX
                   MAJOR="${TAG%%.*}"
 
-                  git add action.yml dist/index.js
+                  git add action.yml dist/index.js README.md LICENSE
                   if git diff --cached --quiet; then
                       echo "Distribution repo already up to date — no commit needed; tagging only."
                   else
