@@ -28,6 +28,10 @@ import {
     type OpenPROctokit,
 } from '~/app/steps/open-pr';
 import { postCompletionComment, type CommentOctokit } from '~/app/steps/post-completion-comment';
+import {
+    reconcileReleaseBranch,
+    type ReconcileOctokit,
+} from '~/app/steps/reconcile-release-branch';
 
 /**
  * Octokit endpoint used by the push-event Phase B path. We can't rely on
@@ -88,7 +92,8 @@ export type ExecutorOctokit = ReleaseOctokit &
     CommentOctokit &
     TagMergeOctokit &
     PullLookupOctokit &
-    ReleaseIssueCloserOctokit;
+    ReleaseIssueCloserOctokit &
+    ReconcileOctokit;
 
 export interface ExecutorDeps {
     octokit: ExecutorOctokit;
@@ -181,6 +186,16 @@ export async function executeProposeRelease(
         }
 
         core.info(`Step 3/5: Commit + push branch ${branch}`);
+        // Reconcile any leftover state on the remote before we attempt to
+        // push. Without this, a prior partial run that pushed the branch
+        // but failed to open the PR leaves an orphan ref that turns every
+        // retry into a non-fast-forward rejection. `reconcileReleaseBranch`
+        // throws OpenReleasePRConflictError when a legitimate in-flight PR
+        // exists (don't touch); deletes orphan refs silently otherwise.
+        const reconciled = await reconcileReleaseBranch(plan, deps.octokit);
+        if (reconciled.orphanReclaimed) {
+            core.info(`  reclaimed orphan branch ${reconciled.branch} from a prior run`);
+        }
         const git = await commitAndPushBranch(
             plan,
             deps.workspaceRoot,
