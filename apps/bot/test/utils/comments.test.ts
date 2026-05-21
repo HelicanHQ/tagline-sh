@@ -7,6 +7,7 @@ import {
     missingWorkflowComment,
     noChangesComment,
     noPermissionComment,
+    releasePRAlreadyOpenComment,
     reportComment,
 } from '../../src/utils/comments.js';
 
@@ -253,6 +254,33 @@ describe('errorComment / noPermissionComment / missingWorkflowComment', () => {
     });
     it('missingWorkflowComment includes a sample YAML', () => {
         expect(missingWorkflowComment()).toContain('workflow_dispatch');
+    });
+});
+
+describe('releasePRAlreadyOpenComment', () => {
+    const args = {
+        prNumber: 42,
+        prUrl: 'https://github.com/acme/widget/pull/42',
+        branch: 'release/v1.5.0',
+    };
+
+    it('surfaces the PR number, URL, and branch so the user can act', () => {
+        const body = releasePRAlreadyOpenComment(args);
+        expect(body).toContain('#42');
+        expect(body).toContain(args.prUrl);
+        expect(body).toContain('`release/v1.5.0`');
+    });
+
+    it('tells the user what to do next instead of just describing the problem', () => {
+        const body = releasePRAlreadyOpenComment(args);
+        expect(body).toMatch(/merge or close/i);
+    });
+
+    it('mentions /approve as <version> as the override path', () => {
+        // Documenting the escape hatch — users who want a *different* version
+        // need to close the PR and use `as` to override. Without this hint
+        // they may not know the bot accepts a version override at all.
+        expect(releasePRAlreadyOpenComment(args)).toContain('/approve as');
     });
 });
 

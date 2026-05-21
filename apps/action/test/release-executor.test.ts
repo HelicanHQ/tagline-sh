@@ -21,8 +21,19 @@ function fakeOctokit(): {
         createRef: ReturnType<typeof vi.fn>;
         updateIssue: ReturnType<typeof vi.fn>;
         removeLabel: ReturnType<typeof vi.fn>;
+        getBranch: ReturnType<typeof vi.fn>;
+        pullsList: ReturnType<typeof vi.fn>;
+        deleteRef: ReturnType<typeof vi.fn>;
     };
 } {
+    // The reconciler's "fresh path" — branch doesn't exist on remote, so no
+    // PR lookup or delete is performed. Individual tests override these
+    // when exercising the orphan-branch or open-PR-conflict paths.
+    const notFound = (): never => {
+        const err = new Error('Not Found') as Error & { status?: number };
+        err.status = 404;
+        throw err;
+    };
     const calls = {
         createRelease: vi.fn(async () => ({
             data: { html_url: 'https://github.com/acme/widget/releases/tag/v1.5.0' },
@@ -34,17 +45,20 @@ function fakeOctokit(): {
         createRef: vi.fn(async (params: { ref: string }) => ({ data: { ref: params.ref } })),
         updateIssue: vi.fn(async () => ({ data: {} })),
         removeLabel: vi.fn(async () => ({})),
+        getBranch: vi.fn(async () => notFound()),
+        pullsList: vi.fn(async () => ({ data: [] })),
+        deleteRef: vi.fn(async () => ({})),
     };
     const octokit = {
         rest: {
-            repos: { createRelease: calls.createRelease },
-            pulls: { create: calls.createPR },
+            repos: { createRelease: calls.createRelease, getBranch: calls.getBranch },
+            pulls: { create: calls.createPR, list: calls.pullsList },
             issues: {
                 createComment: calls.createComment,
                 update: calls.updateIssue,
                 removeLabel: calls.removeLabel,
             },
-            git: { createRef: calls.createRef },
+            git: { createRef: calls.createRef, deleteRef: calls.deleteRef },
         },
     } as unknown as ExecutorOctokit;
     return { octokit, calls };
@@ -340,6 +354,61 @@ describe('executeProposeRelease — failure path', () => {
         expect(calls.createComment).toHaveBeenCalled();
         const body = calls.createComment.mock.calls[0]?.[0] as { body: string };
         expect(body.body).toContain('failed to release');
+    });
+
+    it('deletes an orphan release branch before pushing (reconciler integration)', async () => {
+        const { octokit, calls } = fakeOctokit();
+        const git = fakeGit();
+        // Simulate an orphan branch left behind by a prior partial run:
+        // getBranch resolves (branch exists), pulls.list returns no open PR.
+        calls.getBranch.mockResolvedValueOnce({ data: { name: 'release/v1.5.0' } });
+        calls.pullsList.mockResolvedValueOnce({ data: [] });
+
+        const result = await executeProposeRelease(makePlan(), {
+            octokit,
+            workspaceRoot: dir,
+            git: git as unknown as Parameters<typeof executeProposeRelease>[1]['git'],
+        });
+
+        expect(result.success).toBe(true);
+        expect(calls.deleteRef).toHaveBeenCalledWith({
+            owner: 'acme',
+            repo: 'widget',
+            ref: 'heads/release/v1.5.0',
+        });
+        // Push still happens after the orphan is cleared.
+        expect(git.push).toHaveBeenCalled();
+    });
+
+    it('hard-fails with an OpenReleasePRConflictError when an in-flight release PR exists', async () => {
+        const { octokit, calls } = fakeOctokit();
+        const git = fakeGit();
+        // Orphan branch + an OPEN PR on it — the conflict path.
+        calls.getBranch.mockResolvedValueOnce({ data: { name: 'release/v1.5.0' } });
+        calls.pullsList.mockResolvedValueOnce({
+            data: [
+                {
+                    number: 42,
+                    state: 'open',
+                    html_url: 'https://github.com/acme/widget/pull/42',
+                },
+            ],
+        });
+
+        const result = await executeProposeRelease(makePlan(), {
+            octokit,
+            workspaceRoot: dir,
+            git: git as unknown as Parameters<typeof executeProposeRelease>[1]['git'],
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('#42');
+        expect(result.error).toContain('Merge or close it');
+        // Critical: we did NOT delete the branch, did NOT push, did NOT
+        // open another PR. The in-flight PR is left alone.
+        expect(calls.deleteRef).not.toHaveBeenCalled();
+        expect(git.push).not.toHaveBeenCalled();
+        expect(calls.createPR).not.toHaveBeenCalled();
     });
 });
 

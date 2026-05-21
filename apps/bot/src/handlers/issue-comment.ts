@@ -10,11 +10,16 @@ import {
 import type { ReaderOctokit } from '~/app/services/octokit-reader';
 import { RELEASE_ISSUE_LABEL, extractMarker } from '~/app/services/release-issue';
 import {
+    findOpenReleasePR,
+    type ConflictCheckOctokit,
+} from '~/app/services/release-pr-conflict';
+import {
     acknowledgementComment,
     errorComment,
     missingWorkflowComment,
     noChangesComment,
     noPermissionComment,
+    releasePRAlreadyOpenComment,
     reportComment,
 } from '~/app/utils/comments';
 import { checkWritePermission, type PermissionsOctokit } from '~/app/utils/permissions';
@@ -30,6 +35,8 @@ const asPermissions = (octokit: Context['octokit']): PermissionsOctokit =>
     octokit as unknown as PermissionsOctokit;
 const asDispatch = (octokit: Context['octokit']): DispatchOctokit =>
     octokit as unknown as DispatchOctokit;
+const asConflictCheck = (octokit: Context['octokit']): ConflictCheckOctokit =>
+    octokit as unknown as ConflictCheckOctokit;
 
 const COMMAND_RE = /^\/(\S+)(?:\s+(.*))?$/;
 
@@ -245,6 +252,25 @@ async function runApprove(
                 ...repo,
                 comment_id: ack.data.id,
                 body: noChangesComment(plan.lastTag),
+            });
+            return;
+        }
+
+        // Pre-flight: refuse to dispatch if a release PR is already open for
+        // this version. The action-side reconciler enforces the same rule as
+        // a race-safe fallback; this bot-side check exists so users get a
+        // friendly issue comment without burning a CI run on a guaranteed
+        // failure. See apps/action/src/steps/reconcile-release-branch.ts.
+        const conflict = await findOpenReleasePR(plan, asConflictCheck(context.octokit));
+        if (conflict) {
+            await context.octokit.rest.issues.updateComment({
+                ...repo,
+                comment_id: ack.data.id,
+                body: releasePRAlreadyOpenComment({
+                    prNumber: conflict.number,
+                    prUrl: conflict.url,
+                    branch: conflict.branch,
+                }),
             });
             return;
         }

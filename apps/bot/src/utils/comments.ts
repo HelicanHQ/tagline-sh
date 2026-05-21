@@ -215,6 +215,30 @@ export function noChangesComment(lastTag: string | null): string {
 }
 
 /**
+ * Posted on the release-tracking issue when `/approve` is invoked while a
+ * release PR for the same version already exists. The bot refuses to
+ * dispatch a second workflow run; users need to merge or close the existing
+ * PR first. This is intentionally a polite refusal rather than auto-
+ * overwriting the existing PR — silently force-pushing over a PR the
+ * reviewer is mid-way through merging would be a footgun.
+ */
+export function releasePRAlreadyOpenComment(args: {
+    prNumber: number;
+    prUrl: string;
+    branch: string;
+}): string {
+    return [
+        `${APP_DISPLAY_NAME}: a release PR is already open for this version, so I won't dispatch another one.`,
+        '',
+        `→ **PR #${args.prNumber}** — ${args.prUrl}`,
+        `→ branch: \`${args.branch}\``,
+        '',
+        'Merge or close that PR before re-approving. To ship a different version, ' +
+            'close the existing PR and run `/approve as X.Y.Z` to override.',
+    ].join('\n');
+}
+
+/**
  * Canonical workflow YAML the user must drop into
  * `.github/workflows/release-agent.yml`. Exported so the onboarding PR body
  * and the missing-workflow fallback comment both pull from the same source.
