@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-05-21
+
+### Fixed
+
+- Railway Deployment #75f14a fix: add --legacy to pnpm deploy ([#12](https://github.com/HelicanHQ/tagline-sh/pull/12)) · #75
+- unbreak pnpm deploy under pnpm v10 and harden build context ([#13](https://github.com/HelicanHQ/tagline-sh/pull/13))
+- invoke probot's JS entry directly, not the sh shim ([#14](https://github.com/HelicanHQ/tagline-sh/pull/14))
+
+### Changed
+
+- mirror README + LICENSE to the distribution repo on every release ([#10](https://github.com/HelicanHQ/tagline-sh/pull/10))
+- add Railway as the recommended hosted target ([#11](https://github.com/HelicanHQ/tagline-sh/pull/11))
+
 ## [event-2026-05-21] - 2026-05-21
 
 Released:
