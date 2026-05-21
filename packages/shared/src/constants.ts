@@ -1,4 +1,4 @@
-import type { BumpType, RepoConfig, VersioningConfig } from '~/app/types';
+import type { BumpType, RepoConfig, VersioningConfig } from './types';
 
 // --- Branding -----------------------------------------------------------------
 

@@ -1,5 +1,5 @@
-import type { BumpType, ReleaseSummary } from '~/app/types';
-import { BUMP_PRIORITY } from '~/app/constants';
+import type { BumpType, ReleaseSummary } from './types';
+import { BUMP_PRIORITY } from './constants';
 
 /**
  * Extract ticket references from text.
