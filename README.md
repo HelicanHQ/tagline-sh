@@ -132,6 +132,8 @@ The hosted GitHub App is a convenience, not a commitment. It's operated on best-
 
 This shapes the product: features that would only work on a hosted plane (cross-repo analytics dashboards, account-level billing, multi-tenant queues) are deliberately out of scope. Everything Tagline does, it does inside the boundary of a single GitHub repo, so self-hosting one bot per team or per organisation is genuinely sufficient.
 
+See the [Privacy Policy](./docs/legal/privacy.md), [Terms of Service](./docs/legal/terms.md), and [Support policy](./docs/legal/support.md) for the operational specifics of the hosted instance.
+
 ## License
 
 MIT — see [LICENSE](./LICENSE). Self-hosting is a feature, not a threat.
