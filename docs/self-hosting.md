@@ -4,7 +4,7 @@ Tagline is MIT-licensed and self-hosting is a first-class path. The bot is a sta
 
 ## What you're standing up
 
-Only the **bot server**. The action is published as `tagline-sh/release-agent-action` and runs in users' CI runners — you don't host it.
+Only the **bot server**. The action is published as `HelicanHQ/tagline-release-agent-action` and runs in users' CI runners — you don't host it.
 
 ## Step 1 — register a GitHub App
 

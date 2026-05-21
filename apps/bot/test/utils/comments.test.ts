@@ -268,7 +268,7 @@ describe('defaultWorkflowYaml', () => {
         // SemVer policy: examples and onboarding pin to `@v1` so users get
         // patch/minor updates inside the same major. Bare `@main` or
         // floating refs would silently land breaking changes.
-        expect(defaultWorkflowYaml()).toContain('tagline-sh/release-agent-action@v1');
+        expect(defaultWorkflowYaml()).toContain('HelicanHQ/tagline-release-agent-action@v1');
     });
 
     it('grants the three required permissions and nothing else', () => {

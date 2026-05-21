@@ -1,8 +1,8 @@
 name: Release distribution
 
 # When a vX.Y.Z tag lands on this monorepo, build the action bundle and sync
-# it to tagline-sh/release-agent-action — the consumer-facing repo whose
-# action.yml lives at root, as required for Marketplace listings. The
+# it to HelicanHQ/tagline-release-agent-action — the consumer-facing repo
+# whose action.yml lives at root, as required for Marketplace listings. The
 # distribution repo receives:
 #
 #   - the bundled `dist/index.js` and matching `action.yml`
@@ -20,7 +20,7 @@ name: Release distribution
 #   - TAGLINE_APP_PRIVATE_KEY   — the App's PEM private key
 #
 # Pre-requisite (one-time): install the Tagline GitHub App on
-# `tagline-sh/release-agent-action` with `contents: write` so the App
+# `HelicanHQ/tagline-release-agent-action` with `contents: write` so the App
 # installation token minted below can push commits + tags.
 #
 # Security: the only externally-influenceable input is `github.ref_name`
@@ -35,8 +35,8 @@ on:
             - 'v*'
 
 env:
-    DIST_OWNER: tagline-sh
-    DIST_REPO_NAME: release-agent-action
+    DIST_OWNER: HelicanHQ
+    DIST_REPO_NAME: tagline-release-agent-action
 
 # Source-repo permissions are read-only; the cross-repo writes happen via
 # the short-lived App installation token, not via GITHUB_TOKEN.

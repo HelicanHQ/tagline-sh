@@ -1,6 +1,6 @@
 # Security & supply-chain guidance
 
-Tagline ships in two halves: the **bot** (a GitHub App you install or self-host) and the **action** (`tagline-sh/release-agent-action`, referenced from your workflow YAML). Each half has a different trust model — this doc spells them out.
+Tagline ships in two halves: the **bot** (a GitHub App you install or self-host) and the **action** (`HelicanHQ/tagline-release-agent-action`, referenced from your workflow YAML). Each half has a different trust model — this doc spells them out.
 
 ## The action is what runs in your CI
 
@@ -11,7 +11,7 @@ This means the only piece of Tagline you need to harden against supply-chain ris
 ## Recommended pinning strategy (default)
 
 ```yaml
-- uses: tagline-sh/release-agent-action@v1
+- uses: HelicanHQ/tagline-release-agent-action@v1
 ```
 
 The rolling `v1` major tag is force-moved by [`release.yml`](../.github/workflows/release.yml) every time a new `v1.x.y` ships. You get patch + minor releases automatically; you don't pick up `v2` (which would be allowed to introduce breaking changes) without changing the YAML.
@@ -23,7 +23,7 @@ This is the same pattern used by `actions/checkout@v4`, `actions/setup-node@v4`,
 If your organization requires every action reference to be pinned to a specific commit SHA — common in regulated environments, supply-chain-attack-conscious orgs, or anyone running [Dependabot's `version-updates` for `github-actions`](https://docs.github.com/en/code-security/dependabot/working-with-dependabot/keeping-your-actions-up-to-date-with-dependabot) — pin the SHA instead:
 
 ```yaml
-- uses: tagline-sh/release-agent-action@<full-40-char-sha>  # v1.2.3
+- uses: HelicanHQ/tagline-release-agent-action@<full-40-char-sha>  # v1.2.3
 ```
 
 The trailing comment is the convention Dependabot reads; it auto-bumps the SHA when a new release tag lands and includes the human-readable version in the PR.
