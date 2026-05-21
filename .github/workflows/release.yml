@@ -184,13 +184,51 @@ jobs:
                       git push origin HEAD
                   fi
 
-                  # Semver tag — created fresh per release, never overwritten.
-                  git tag -a "${TAG}" -m "${TAG}"
+                  # Semver tag reconciliation — three legal states:
+                  #
+                  #   1. tag absent on remote → create + push (the normal path)
+                  #   2. tag present, points at HEAD → no-op (idempotent re-run
+                  #      after a partial earlier run; this is what unblocks the
+                  #      "git push HEAD succeeded but tag step failed" case)
+                  #   3. tag present, points elsewhere → fail loudly
+                  #
+                  # State (3) is unrecoverable from inside the workflow — a
+                  # stale tag means some other process (manual push, a
+                  # dogfood release loop, a separate workflow) minted it
+                  # against the wrong commit. Force-moving a semver tag
+                  # would silently break any consumer that already pinned
+                  # it, so the only safe action is to surface the conflict
+                  # and let a human reconcile.
+                  REMOTE_TAG_SHA=$(git ls-remote origin "refs/tags/${TAG}" | awk '{print $1}')
+                  LOCAL_HEAD_SHA=$(git rev-parse HEAD)
+                  if [ -z "${REMOTE_TAG_SHA}" ]; then
+                      git tag -a "${TAG}" -m "${TAG}"
+                      git push origin "${TAG}"
+                  else
+                      # Annotated tags resolve to a tag object SHA, not the
+                      # commit SHA, so ls-remote alone cannot tell us
+                      # whether the existing tag points at HEAD. Deref via
+                      # ^{} on the remote ref to get the commit it targets.
+                      REMOTE_TAG_COMMIT=$(git ls-remote origin "refs/tags/${TAG}^{}" | awk '{print $1}')
+                      # Lightweight tags have no deref form, so REMOTE_TAG_COMMIT
+                      # is empty for them — fall back to the ref SHA itself.
+                      if [ -z "${REMOTE_TAG_COMMIT}" ]; then
+                          REMOTE_TAG_COMMIT="${REMOTE_TAG_SHA}"
+                      fi
+                      if [ "${REMOTE_TAG_COMMIT}" = "${LOCAL_HEAD_SHA}" ]; then
+                          echo "Tag ${TAG} already points at HEAD (${LOCAL_HEAD_SHA}). Idempotent no-op."
+                      else
+                          echo "::error title=Stale ${TAG} tag in distribution repo::Tag ${TAG} already exists in ${DIST_OWNER}/${DIST_REPO_NAME} pointing at ${REMOTE_TAG_COMMIT}, but this release wants it to point at ${LOCAL_HEAD_SHA}. Force-moving a semver tag would silently break consumers that already pinned it. Delete the stale tag from the distribution repo and re-run this workflow: gh api -X DELETE repos/${DIST_OWNER}/${DIST_REPO_NAME}/git/refs/tags/${TAG}"
+                          exit 1
+                      fi
+                  fi
+
                   # Rolling major tag — force-moved to track the latest
                   # commit so consumers pinning to `@vN` get automatic
-                  # patch + minor updates within the major.
+                  # patch + minor updates within the major. Force is
+                  # intentional and load-bearing here; no reconciliation
+                  # needed because mismatch is the expected state.
                   git tag -fa "${MAJOR}" -m "${MAJOR}"
-                  git push origin "${TAG}"
                   git push origin "${MAJOR}" --force
 
             - name: Create GitHub Release on distribution repo
