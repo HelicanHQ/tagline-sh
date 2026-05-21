@@ -25,6 +25,13 @@ COPY apps/bot ./apps/bot
 RUN pnpm --filter @tagline-sh/shared build && pnpm --filter @tagline-sh/bot build
 
 # Prune devDependencies for the runtime image.
+#
+# `--legacy` is mandatory under pnpm v10. By default pnpm v10 only deploys from
+# workspaces with `inject-workspace-packages=true`; without that, deploy exits 1
+# with ERR_PNPM_DEPLOY_NONINJECTED_WORKSPACE and the runtime stage ends up
+# missing both node_modules and dist/. Setting inject-workspace-packages
+# globally would change resolution semantics for every dev-time `pnpm install`,
+# so we scope the relaxation to this one deploy call instead.
 RUN pnpm --filter @tagline-sh/bot --prod deploy --legacy /pruned
 
 
