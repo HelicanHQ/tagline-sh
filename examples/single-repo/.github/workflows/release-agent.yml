@@ -1,4 +1,4 @@
-name: Release Agent
+name: Tagline Release Agent
 
 # Tagline runs in two phases against this workflow:
 #
@@ -21,13 +21,13 @@ on:
     workflow_dispatch:
         inputs:
             release_plan:
-                description: 'Release plan (provided by Tagline bot)'
+                description: "Release plan (provided by Tagline bot)"
                 required: true
                 type: string
             issue_number:
                 required: false
                 type: string
-                default: ''
+                default: ""
             dry_run:
                 required: false
                 type: boolean
