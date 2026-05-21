@@ -12,3 +12,4 @@ export * from '~/app/services/report-generator';
 export * from '~/app/services/pr-reader';
 export * from '~/app/services/octokit-reader';
 export * from '~/app/services/package-planner';
+export * from '~/app/services/release-issue';

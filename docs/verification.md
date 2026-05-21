@@ -114,9 +114,10 @@ Goal: validate the webhook → bot → AI → action → GitHub round-trip on a 
 
 **Steps**:
 
-1. On any issue, comment `/release-report`.
-2. Wait ~10 seconds for the bot to edit its acknowledgement into the full report.
-3. Verify the report comment contains:
+1. Wait for Tagline to open the release-tracking issue (it appears automatically after the first feature PR merges; title starts with `🚀 Release pending`).
+2. On that issue, comment `/release-report`.
+3. Wait ~10 seconds for the bot to edit its acknowledgement into the full report.
+4. Verify the report comment contains:
     - Header with last tag + date, branch (`main`), PR/commit/contributor counts.
     - "✨ New features" section listing the `feat` PR.
     - "🐛 Bug fixes" section listing the `fix` PR.
@@ -126,23 +127,25 @@ Goal: validate the webhook → bot → AI → action → GitHub round-trip on a 
     - **Changelog preview** collapsible section showing the Keep-a-Changelog format.
     - **Plain-language summary** collapsible section showing the AI-generated headline + body + highlights.
     - Slash-command footer: `/approve patch | minor | major | --draft | --dry-run`.
-4. Comment `/approve minor --dry-run`.
-5. Verify a new acknowledgement comment posts, then the workflow run starts; in the run logs, confirm:
+5. On the same release-tracking issue, comment `/approve minor --dry-run`.
+6. Verify a new acknowledgement comment posts, then the workflow run starts; in the run logs, confirm:
     - Step 1: "Bumping versions to 1.5.0" (one file).
     - Step 2: "Writing CHANGELOG.md" (one file).
     - Step 3+ skipped due to dry-run.
-    - Completion comment posted with "dry-run complete".
-6. Comment `/approve minor` (no dry-run).
-7. Verify in the workflow run:
+    - Completion comment posted on the release-tracking issue with "dry-run complete".
+7. Still on the same issue, comment `/approve minor` (no dry-run).
+8. Verify in the workflow run:
     - Branch `release/v1.5.0` is created.
     - `package.json` version bumped to `1.5.0`.
     - `CHANGELOG.md` prepended with `## [1.5.0]`.
     - Annotated tag `v1.5.0` is created (single tag).
     - GitHub release `v1.5.0` is published, with the **plain-language summary at the top of the body**, then `---`, then the technical changelog.
     - PR opened from `release/v1.5.0` → `main`.
-    - Completion comment posted with the **"Ready to share"** block containing the same summary `rawMarkdown` from the report.
-8. Manually merge the release PR.
-9. Re-run `/release-report` on a different issue. Verify the report says "No changes detected since `v1.5.0`" (the release PR was filtered by `isReleaseBranch`, not picked up as the next release's PR).
+    - On Phase B: the release-tracking issue gets a "Released! 🎉" comment with the **"Ready to share"** block containing the same summary `rawMarkdown` from the report. The `tagline:release-pending` label is removed and the issue is **closed**.
+9. Manually merge the release PR (if not already merged in step 8). Phase B fires on the push to `main`.
+10. Merge another small PR (any `chore:` will do). Verify a **fresh** release-tracking issue opens — the closed one is not reopened.
+11. On the new issue, comment `/release-report`. Verify the report says "No changes detected since `v1.5.0`" if no eligible PRs landed since the tag, or shows only the new `chore:` PR if it landed after.
+12. Confirm: a `/release-report` comment posted on a *different* (non-release-tracking) issue or PR produces **no bot response at all** — venue gate is silent.
 
 ### 2.3 Single-repo, CalVer
 
@@ -159,11 +162,11 @@ Goal: validate the webhook → bot → AI → action → GitHub round-trip on a 
 
 **Steps**:
 
-1. Merge any PR (a small `feat` or `fix`).
-2. `/release-report`.
+1. Merge any PR (a small `feat` or `fix`). Wait for the release-tracking issue to open.
+2. On the release-tracking issue, comment `/release-report`.
 3. Verify the report's recommendation line reads `**Next version:** \`v2026.05.1\` _(scheme: calver)_` (or appropriate based on today's date and the previous version).
 4. Verify the slash-command footer advertises `/approve as <version>` instead of bump words.
-5. Try `/approve minor` — expect a validation error: "Bump words like \`minor\` only apply when \`versioning.scheme\` is \`semver\`."
+5. Try `/approve minor` on the release issue — expect a validation error: "Bump words like \`minor\` only apply when \`versioning.scheme\` is \`semver\`."
 6. Try `/approve` (no override). The workflow runs, tag `v2026.05.1` is created on the merge commit.
 
 ### 2.4 Single-repo, Incremental
@@ -180,9 +183,9 @@ Goal: validate the webhook → bot → AI → action → GitHub round-trip on a 
 
 **Steps**:
 
-1. Merge any PR.
-2. `/release-report` → "Next version: `v42` (scheme: incremental)".
-3. `/approve` → tag `v42`.
+1. Merge any PR. Wait for the release-tracking issue.
+2. On the release issue: `/release-report` → "Next version: `v42` (scheme: incremental)".
+3. On the release issue: `/approve` → tag `v42`.
 
 ### 2.5 Single-repo, AI unavailable (degraded path)
 
@@ -192,11 +195,11 @@ Goal: validate the webhook → bot → AI → action → GitHub round-trip on a 
 
 **Steps**:
 
-1. Merge a small PR.
-2. `/release-report`.
+1. Merge a small PR. Wait for the release-tracking issue.
+2. On the release issue: `/release-report`.
 3. Verify the report's "Recommendation" reasoning reads exactly `AI unavailable — manual review required`.
 4. Verify the "Plain-language summary" section STILL appears, but with the fallback body (`v{N} includes {N} updates` style) and highlights drawn from PR titles.
-5. `/approve patch` should still produce a valid release; verify the GitHub release body uses the fallback summary as its top section.
+5. `/approve patch` on the release issue should still produce a valid release; verify the GitHub release body uses the fallback summary as its top section.
 6. Restore the AI key. Re-test. Confirm rich AI summary returns.
 
 ### 2.6 Monorepo, SemVer per-package (the M3 hero case)
@@ -214,7 +217,7 @@ Goal: validate the webhook → bot → AI → action → GitHub round-trip on a 
 
 **Steps**:
 
-1. `/release-report`.
+1. Wait for the release-tracking issue to open (auto-created when the first of the three PRs merges; subsequent merges update it). On the release issue, comment `/release-report`.
 2. Verify the report shows a **per-package table**:
     ```
     | Package    | Current → Next  | Bump  | PRs   |
@@ -250,13 +253,13 @@ Goal: validate the webhook → bot → AI → action → GitHub round-trip on a 
 
 **Steps**:
 
-1. `/release-report` today (May 19, say).
+1. On the release-tracking issue, comment `/release-report` (today, May 19, say).
 2. The per-package table shows ONLY `@acme/api`, computed as `2026.4.0 → 2026.5.0` (month rollover → MICRO resets).
 3. `@acme/ui` and `@acme/db` are absent (no PRs touched them).
-4. `/approve` — action runs, `@acme/api@2026.5.0` tag pushed.
-5. Merge another PR touching only `packages/api/` on the same day. `/release-report` again. New table: `@acme/api: 2026.5.0 → 2026.5.1` (same month, MICRO increments).
-6. Merge a PR touching only `packages/ui/`. `/release-report`. Table: `@acme/ui: 2026.4.0 → 2026.5.0` (its own MICRO reset, INDEPENDENTLY of api's `2026.5.1`). `@acme/api` should be **absent** from this table (no new PRs touched it).
-7. `/approve`. Verify `@acme/ui@2026.5.0` is pushed; `@acme/api` is untouched at `2026.5.1`.
+4. `/approve` on the issue — action runs, `@acme/api@2026.5.0` tag pushed. The release issue closes after Phase B.
+5. Merge another PR touching only `packages/api/` on the same day. A fresh release-tracking issue opens. On it: `/release-report`. New table: `@acme/api: 2026.5.0 → 2026.5.1` (same month, MICRO increments).
+6. Merge a PR touching only `packages/ui/`. The (still-open) release issue updates with both PRs. On it: `/release-report`. Table: `@acme/ui: 2026.4.0 → 2026.5.0` (its own MICRO reset, INDEPENDENTLY of api's `2026.5.1`). `@acme/api` should also show, since the PR from step 5 hasn't shipped yet.
+7. `/approve api:patch ui:patch` on the release issue. Verify `@acme/ui@2026.5.0` and `@acme/api@2026.5.1` are pushed; `@acme/db` is untouched.
 
 This step validates the user's killer scenario: "release webapp + api on the same day, but not the database; per-package MICRO independence."
 
@@ -275,8 +278,9 @@ For each of these, comment the indicated `/approve …` and confirm the bot's re
 
 ### 2.9 Permission gating
 
-- Try `/release-report` from a GitHub account that has **read-only** access to the test repo.
+- On an open release-tracking issue, try `/release-report` from a GitHub account that has **read-only** access to the test repo.
 - Expect the bot to reply asking the actor to request write access; no AI call, no workflow dispatch.
+- Try `/release-report` on a random unrelated issue (no `tagline:release-pending` label). Expect **no bot response at all** — the venue gate runs before the permission check, so read-only users on the wrong venue also get silence.
 
 ### 2.10 Idempotency safeguard (Phase B)
 
@@ -286,11 +290,11 @@ For each of these, comment the indicated `/approve …` and confirm the bot's re
 
 ### 2.11 Two-phase contract: cancel by closing
 
-- Run `/approve` on the test repo to open a release PR.
+- Run `/approve` on the release-tracking issue to open a release PR.
 - Verify: NO tag exists yet (`gh api repos/<owner>/<repo>/tags`), NO GitHub Release exists yet (`gh release list`).
 - **Close** the release PR (don't merge).
-- Verify: still no tag, no release. The workflow either doesn't trigger (closed-without-merge filter) or triggers and logs "PR was closed without merging — skipping finalize."
-- Run `/approve` again — should be able to start a fresh release proposal without conflict.
+- Verify: still no tag, no release. The push-triggered Phase B may run on subsequent pushes but self-filters out (no release-PR merge → no-op). The release-tracking issue remains open with the `tagline:release-pending` label intact.
+- Run `/approve` again on the same release issue — should be able to start a fresh release proposal without conflict.
 
 ### 2.12 Two-phase contract: tag lands on merge commit
 
@@ -349,25 +353,27 @@ Goal: catch anything that only surfaces in real GitHub environments — rate lim
 
 For the MVP cut, every cell below should be checked off:
 
-| Scenario                                     | Tier 1  | Tier 2           | Tier 3  |
-| -------------------------------------------- | ------- | ---------------- | ------- |
-| Static gates (typecheck/lint/test/build)     | ✅ §1.1 | —                | —       |
-| Schema round-trip                            | ✅ §1.3 | —                | —       |
-| dry-report.ts smoke                          | ✅ §1.2 | —                | —       |
-| Single-repo SemVer happy path                | —       | ✅ §2.2          | (3.2)   |
-| Single-repo SemVer dry-run                   | —       | ✅ §2.2 step 4–5 | —       |
-| Single-repo CalVer                           | —       | ✅ §2.3          | —       |
-| Single-repo Incremental                      | —       | ✅ §2.4          | —       |
-| AI-unavailable degradation                   | —       | ✅ §2.5          | ✅ §3.4 |
-| Monorepo SemVer (per-package + table + tags) | —       | ✅ §2.6          | ✅ §3.2 |
-| Monorepo CalVer (independent MICRO)          | —       | ✅ §2.7          | —       |
-| Override grammar edge cases                  | —       | ✅ §2.8          | —       |
-| Permission gating                            | —       | ✅ §2.9          | —       |
-| Idempotency safeguards                       | —       | ✅ §2.10         | —       |
-| Previous-release-PR leak filter (M1)         | —       | ✅ §2.2 step 9   | ✅ §3.1 |
-| Plain-language summary appears in 3 places   | —       | ✅ §2.2, §2.6    | —       |
-| Rate limit / large-history endurance         | —       | —                | ✅ §3.3 |
-| Self-hosted Docker                           | —       | —                | ✅ §3.5 |
+| Scenario                                     | Tier 1  | Tier 2              | Tier 3  |
+| -------------------------------------------- | ------- | ------------------- | ------- |
+| Static gates (typecheck/lint/test/build)     | ✅ §1.1 | —                   | —       |
+| Schema round-trip                            | ✅ §1.3 | —                   | —       |
+| dry-report.ts smoke                          | ✅ §1.2 | —                   | —       |
+| Single-repo SemVer happy path                | —       | ✅ §2.2             | (3.2)   |
+| Single-repo SemVer dry-run                   | —       | ✅ §2.2 steps 5–6   | —       |
+| Single-repo CalVer                           | —       | ✅ §2.3             | —       |
+| Single-repo Incremental                      | —       | ✅ §2.4             | —       |
+| AI-unavailable degradation                   | —       | ✅ §2.5             | ✅ §3.4 |
+| Monorepo SemVer (per-package + table + tags) | —       | ✅ §2.6             | ✅ §3.2 |
+| Monorepo CalVer (independent MICRO)          | —       | ✅ §2.7             | —       |
+| Override grammar edge cases                  | —       | ✅ §2.8             | —       |
+| Permission gating                            | —       | ✅ §2.9             | —       |
+| Idempotency safeguards                       | —       | ✅ §2.10            | —       |
+| Previous-release-PR leak filter (M1)         | —       | ✅ §2.2 steps 10–11 | ✅ §3.1 |
+| Plain-language summary appears in 3 places   | —       | ✅ §2.2, §2.6       | —       |
+| Release-tracking issue venue gate (v0.2)     | —       | ✅ §2.2 step 12, §2.9 | —     |
+| Release-tracking issue lifecycle (v0.2)      | —       | ✅ §2.2 steps 8–10  | —       |
+| Rate limit / large-history endurance         | —       | —                   | ✅ §3.3 |
+| Self-hosted Docker                           | —       | —                   | ✅ §3.5 |
 
 ---
 

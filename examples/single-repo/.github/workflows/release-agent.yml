@@ -1,4 +1,4 @@
-name: Release Agent
+name: Tagline Release Agent
 
 # Tagline runs in two phases against this workflow:
 #
@@ -21,13 +21,13 @@ on:
     workflow_dispatch:
         inputs:
             release_plan:
-                description: 'Release plan (provided by Tagline bot)'
+                description: "Release plan (provided by Tagline bot)"
                 required: true
                 type: string
             issue_number:
                 required: false
                 type: string
-                default: ''
+                default: ""
             dry_run:
                 required: false
                 type: boolean
@@ -54,7 +54,7 @@ jobs:
                   fetch-depth: 0
                   token: ${{ secrets.GITHUB_TOKEN }}
 
-            - uses: tagline-sh/release-agent-action@v1
+            - uses: HelicanHQ/tagline-release-agent-action@v1
               with:
                   release_plan: ${{ inputs.release_plan }}
                   github_token: ${{ secrets.GITHUB_TOKEN }}

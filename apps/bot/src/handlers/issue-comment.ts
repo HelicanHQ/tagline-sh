@@ -8,6 +8,7 @@ import {
     type DispatchOctokit,
 } from '../commands/approve.js';
 import type { ReaderOctokit } from '~/app/services/octokit-reader';
+import { RELEASE_ISSUE_LABEL, extractMarker } from '~/app/services/release-issue';
 import {
     acknowledgementComment,
     errorComment,
@@ -49,6 +50,38 @@ function readAIConfig(): AIConfig | undefined {
 }
 
 /**
+ * Determine whether this comment is on the canonical release-tracking issue.
+ *
+ * v0.2 changed the slash-command UX from "comment on any issue or PR" to
+ * "comment only on the bot-managed release-tracking issue." We identify that
+ * issue by the combination of (a) the `tagline:release-pending` label and
+ * (b) a hidden HTML-comment marker in the issue body. Either alone is
+ * fragile (labels can be added by hand; markers can be edited out); both
+ * together are reliable.
+ *
+ * Returns `true` only when both signals are present. Returns `false`
+ * silently for any non-release-issue venue — no error reply, no comment,
+ * to avoid notification spam on unrelated issues/PRs.
+ */
+function isReleaseTrackingIssue(issue: {
+    body?: string | null;
+    labels?: Array<{ name?: string } | string>;
+    pull_request?: unknown;
+}): boolean {
+    // PRs are never the release-tracking issue.
+    if (issue.pull_request) return false;
+
+    const labels = issue.labels ?? [];
+    const hasLabel = labels.some((l) => {
+        if (typeof l === 'string') return l === RELEASE_ISSUE_LABEL;
+        return l.name === RELEASE_ISSUE_LABEL;
+    });
+    if (!hasLabel) return false;
+
+    return extractMarker(issue.body) !== null;
+}
+
+/**
  * Route an issue/PR comment to a slash command. Performs the bot/permission
  * filter up-front so command handlers do not have to repeat it.
  *
@@ -64,6 +97,22 @@ export async function handleIssueComment(context: Context<'issue_comment.created
     const body = comment.body.trim();
     const matched = COMMAND_RE.exec(body);
     if (!matched) return;
+
+    // Venue gate: slash commands are accepted ONLY on the bot-managed
+    // release-tracking issue. Comments anywhere else are ignored silently.
+    // This must happen before the permission check to avoid the API call
+    // on unrelated venues.
+    if (!isReleaseTrackingIssue(context.payload.issue)) {
+        context.log.debug(
+            {
+                repo: context.repo(),
+                issueNumber: context.payload.issue.number,
+                command: matched[1],
+            },
+            'Slash command ignored — not on the release-tracking issue',
+        );
+        return;
+    }
 
     const command = matched[1]!.toLowerCase();
     const args = (matched[2] ?? '').trim();

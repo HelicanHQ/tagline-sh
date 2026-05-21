@@ -2,12 +2,12 @@ import { describe, it, expect } from 'vitest';
 import type { ReleaseReport } from '@tagline-sh/shared';
 import {
     acknowledgementComment,
+    defaultWorkflowYaml,
     errorComment,
     missingWorkflowComment,
     noChangesComment,
     noPermissionComment,
     reportComment,
-    welcomeIssue,
 } from '../../src/utils/comments.js';
 
 const sampleReport: ReleaseReport = {
@@ -256,12 +256,34 @@ describe('errorComment / noPermissionComment / missingWorkflowComment', () => {
     });
 });
 
-describe('welcomeIssue', () => {
-    it('has a welcoming title and a setup checklist', () => {
-        const { title, body } = welcomeIssue();
-        expect(title).toContain('Tagline');
-        expect(body).toContain('- [ ] Add `.github/workflows/release-agent.yml`');
-        expect(body).toContain('- [ ] Set `AI_API_KEY`');
-        expect(body).toContain('/release-report');
+describe('defaultWorkflowYaml', () => {
+    it('emits a workflow with both Phase A (workflow_dispatch) and Phase B (push) triggers', () => {
+        const yaml = defaultWorkflowYaml();
+        expect(yaml).toContain('workflow_dispatch:');
+        expect(yaml).toContain('push:');
+        expect(yaml).toContain('branches: [main, master]');
+    });
+
+    it('pins to the major-tag of the action', () => {
+        // SemVer policy: examples and onboarding pin to `@v1` so users get
+        // patch/minor updates inside the same major. Bare `@main` or
+        // floating refs would silently land breaking changes.
+        expect(defaultWorkflowYaml()).toContain('HelicanHQ/tagline-release-agent-action@v1');
+    });
+
+    it('grants the three required permissions and nothing else', () => {
+        const yaml = defaultWorkflowYaml();
+        expect(yaml).toContain('contents: write');
+        expect(yaml).toContain('pull-requests: write');
+        expect(yaml).toContain('issues: write');
+        // No write to actions, deployments, packages, etc.
+        expect(yaml).not.toMatch(/actions: write/);
+        expect(yaml).not.toMatch(/deployments: write/);
+    });
+
+    it('is embedded verbatim in missingWorkflowComment (single source of truth)', () => {
+        // If this fails, the two strings drifted — onboarding PR users and
+        // recovery-path users would end up with subtly-different workflows.
+        expect(missingWorkflowComment()).toContain(defaultWorkflowYaml());
     });
 });

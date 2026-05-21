@@ -1,27 +1,5 @@
 name: Tagline Release Agent
 
-# Monorepo workflow — byte-identical to single-repo. The Tagline action
-# detects the monorepo type (pnpm-workspaces, turborepo, nx, lerna, npm/yarn
-# workspaces) from the repo's marker files and bumps each affected package
-# independently with its own tag.
-#
-# Tagline runs in two phases against this workflow:
-#
-#   - Phase A (propose): triggered by `workflow_dispatch` when you `/approve`.
-#     The action bumps per-package versions, writes per-package CHANGELOGs,
-#     pushes a `release/vevent-YYYY-MM-DD` branch, and opens a release PR.
-#     **No tags or GitHub Releases are created in this phase.**
-#
-#   - Phase B (finalize): triggered by `push` to the production branch. When
-#     the head commit is the merge commit of a `release/*` PR, the action
-#     creates one tag per package at the merge commit (Changesets convention:
-#     `@scope/name@1.5.0`) and publishes one GitHub Release per tag. Regular
-#     pushes no-op cleanly.
-#
-# Why `push` and not `pull_request: closed`: PRs opened with the default
-# `GITHUB_TOKEN` (which Phase A uses) do NOT fire `pull_request` events when
-# merged. `push` events fire reliably and let Phase B work on any token.
-
 on:
     workflow_dispatch:
         inputs:

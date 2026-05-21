@@ -2,7 +2,9 @@ name: 'Tagline Release Action'
 description: 'Executes a release plan prepared by the Tagline bot — bumps versions, writes CHANGELOG.md, tags, releases, opens PR.'
 author: 'tagline-sh'
 branding:
-    icon: 'package'
+    # `tag` (Feather icon set) — Marketplace branding. Color must be one of
+    # GitHub's allowed values; `blue` matches Tagline's identity.
+    icon: 'tag'
     color: 'blue'
 
 inputs:
@@ -11,10 +13,10 @@ inputs:
         required: false
         default: ''
     github_token:
-        description: 'GitHub token with contents and pull-requests write permissions'
+        description: 'GitHub token with contents, pull-requests, and issues write permissions (issues write is needed by Phase B to close the release-tracking issue).'
         required: true
     issue_number:
-        description: 'Issue number to post the completion comment on (empty to skip)'
+        description: 'Release-tracking issue number, passed through by the bot during workflow_dispatch. Phase B closes this issue on success. Empty for legacy / dry-run plans.'
         required: false
         default: ''
     dry_run:

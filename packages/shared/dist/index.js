@@ -278,6 +278,72 @@ function parseReleasePlan(json) {
   const data = JSON.parse(json);
   return ReleasePlanSchema.parse(data);
 }
+
+// src/release-issue.ts
+var RELEASE_ISSUE_LABEL = "tagline:release-pending";
+var RELEASE_ISSUE_LABEL_COLOR = "0E8A16";
+var RELEASE_ISSUE_LABEL_DESCRIPTION = "Tagline tracks merged PRs in this issue until the next release ships.";
+var RELEASE_ISSUE_MARKER_START = "<!-- tagline-issue-v1";
+var RELEASE_ISSUE_MARKER_END = "-->";
+function encodeReleaseIssueMarker(marker) {
+  return `${RELEASE_ISSUE_MARKER_START} ${JSON.stringify(marker)} ${RELEASE_ISSUE_MARKER_END}`;
+}
+function extractReleaseIssueMarker(body) {
+  if (!body) return null;
+  const start = body.indexOf(RELEASE_ISSUE_MARKER_START);
+  if (start === -1) return null;
+  const after = start + RELEASE_ISSUE_MARKER_START.length;
+  const end = body.indexOf(RELEASE_ISSUE_MARKER_END, after);
+  if (end === -1) return null;
+  const json = body.slice(after, end).trim();
+  try {
+    const parsed = JSON.parse(json);
+    if (!parsed || typeof parsed !== "object" || parsed.v !== 1 || typeof parsed.branch !== "string") {
+      return null;
+    }
+    const marker = parsed;
+    return {
+      v: 1,
+      branch: marker.branch,
+      lastTag: marker.lastTag ?? null
+    };
+  } catch {
+    return null;
+  }
+}
+function buildReleaseIssueClosingCommentBody(args) {
+  const lines = [];
+  lines.push(`Released \`${args.tagName}\` \u{1F389}`);
+  lines.push("");
+  lines.push(`Release: ${args.releaseUrl}`);
+  lines.push("");
+  lines.push("---");
+  lines.push("");
+  lines.push("**Ready to share:**");
+  lines.push("");
+  lines.push(args.readyToShareMarkdown.trimEnd());
+  return lines.join("\n");
+}
+function buildReleaseIssueMonorepoClosingCommentBody(args) {
+  const lines = [];
+  lines.push(`Released ${args.tags.length} packages \u{1F389}`);
+  lines.push("");
+  for (let i = 0; i < args.tags.length; i += 1) {
+    const url = args.releaseUrls[i];
+    if (url) {
+      lines.push(`- \`${args.tags[i]}\` \u2192 ${url}`);
+    } else {
+      lines.push(`- \`${args.tags[i]}\` (already released, skipped)`);
+    }
+  }
+  lines.push("");
+  lines.push("---");
+  lines.push("");
+  lines.push("**Ready to share:**");
+  lines.push("");
+  lines.push(args.readyToShareMarkdown.trimEnd());
+  return lines.join("\n");
+}
 export {
   AI_DEFAULTS,
   APP_DISPLAY_NAME,
@@ -297,6 +363,11 @@ export {
   ParsedCommitSchema,
   ParsedPRSchema,
   RELEASE_BRANCH_PREFIX,
+  RELEASE_ISSUE_LABEL,
+  RELEASE_ISSUE_LABEL_COLOR,
+  RELEASE_ISSUE_LABEL_DESCRIPTION,
+  RELEASE_ISSUE_MARKER_END,
+  RELEASE_ISSUE_MARKER_START,
   RELEASE_WORKFLOW_FILE,
   ReleasePlanSchema,
   ReleaseResultSchema,
@@ -305,8 +376,12 @@ export {
   VersioningConfigSchema,
   VersioningSchemeSchema,
   aggregateBumps,
+  buildReleaseIssueClosingCommentBody,
+  buildReleaseIssueMonorepoClosingCommentBody,
   buildSummaryMarkdown,
+  encodeReleaseIssueMarker,
   excerpt,
+  extractReleaseIssueMarker,
   extractTickets,
   formatSummaryDate,
   isReleaseBranch,

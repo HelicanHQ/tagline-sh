@@ -214,14 +214,13 @@ export function noChangesComment(lastTag: string | null): string {
     return `${APP_DISPLAY_NAME}: no changes detected since \`${lastTag}\`.`;
 }
 
-/** Setup instructions when `.github/workflows/release-agent.yml` is missing. */
-export function missingWorkflowComment(): string {
+/**
+ * Canonical workflow YAML the user must drop into
+ * `.github/workflows/release-agent.yml`. Exported so the onboarding PR body
+ * and the missing-workflow fallback comment both pull from the same source.
+ */
+export function defaultWorkflowYaml(): string {
     return [
-        `${APP_DISPLAY_NAME} can't trigger the release because \`.github/workflows/release-agent.yml\` is missing.`,
-        '',
-        'Add this file to your repo:',
-        '',
-        '```yaml',
         'name: Release Agent',
         'on:',
         '  # Phase A — propose: opens a release PR with version bump + CHANGELOG.',
@@ -257,12 +256,24 @@ export function missingWorkflowComment(): string {
         '    steps:',
         '      - uses: actions/checkout@v4',
         '        with: { fetch-depth: 0 }',
-        '      - uses: tagline-sh/release-agent-action@v1',
+        '      - uses: HelicanHQ/tagline-release-agent-action@v1',
         '        with:',
         '          release_plan: ${{ inputs.release_plan }}',
         '          github_token: ${{ secrets.GITHUB_TOKEN }}',
         '          issue_number: ${{ inputs.issue_number }}',
         '          dry_run: ${{ inputs.dry_run }}',
+    ].join('\n');
+}
+
+/** Setup instructions when `.github/workflows/release-agent.yml` is missing. */
+export function missingWorkflowComment(): string {
+    return [
+        `${APP_DISPLAY_NAME} can't trigger the release because \`.github/workflows/release-agent.yml\` is missing.`,
+        '',
+        'Add this file to your repo:',
+        '',
+        '```yaml',
+        defaultWorkflowYaml(),
         '```',
     ].join('\n');
 }
@@ -285,21 +296,3 @@ export function errorComment(action: string, detail?: string): string {
     return `${base} Please try again, or check the bot logs.`;
 }
 
-/** Issue body posted when the GitHub App is first installed. */
-export function welcomeIssue(): { title: string; body: string } {
-    return {
-        title: `👋 Welcome to ${APP_DISPLAY_NAME}`,
-        body: [
-            `Thanks for installing **${APP_DISPLAY_NAME}**!`,
-            '',
-            'Here\'s what to do next:',
-            '',
-            '- [ ] Add `.github/workflows/release-agent.yml` to your repo (see the docs).',
-            '- [ ] Set `AI_API_KEY` in your repo secrets (any OpenAI-compatible provider).',
-            `- [ ] Optionally add \`.release-agent.md\` to configure ${APP_DISPLAY_NAME}.`,
-            '- [ ] Comment `/release-report` on any issue to generate your first report.',
-            '',
-            `Questions? See the [docs](https://github.com/tagline-sh/tagline-sh).`,
-        ].join('\n'),
-    };
-}
