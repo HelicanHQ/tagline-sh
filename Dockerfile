@@ -49,4 +49,14 @@ COPY --from=builder --chown=tagline:tagline /pruned/node_modules ./node_modules
 COPY --from=builder --chown=tagline:tagline /pruned/package.json ./package.json
 
 EXPOSE 3000
-CMD ["node", "node_modules/.bin/probot", "run", "./dist/index.js"]
+# Invoke probot's real JS entry directly, NOT the `.bin/probot` shim.
+#
+# pnpm deploy --legacy produces a shell-script shim at node_modules/.bin/probot
+# (starts with `#!/bin/sh` then `basedir=$(...)`). The shim works under any
+# shell (it's how `pnpm dev` resolves `probot run` locally), but Docker's
+# exec-form CMD bypasses shells entirely — `execve("node", [".bin/probot", ...])`
+# hands the shell script to Node which then SyntaxErrors on line 2's
+# `basedir=$(...)`. The container then crash-loops and Railway's /ping never
+# resolves. Calling the real JS file (which has its own `#!/usr/bin/env node`
+# shebang) sidesteps the shim entirely.
+CMD ["node", "node_modules/probot/bin/probot.js", "run", "./dist/index.js"]
