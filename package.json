@@ -1,6 +1,6 @@
 {
     "name": "tagline-sh",
-    "version": "0.0.0",
+    "version": "v0.1.1",
     "private": true,
     "type": "module",
     "description": "Open-source GitHub-native AI agent that configures and automates the thinking step of the software release process — not just the mechanics",
