@@ -25,7 +25,7 @@ COPY apps/bot ./apps/bot
 RUN pnpm --filter @tagline-sh/shared build && pnpm --filter @tagline-sh/bot build
 
 # Prune devDependencies for the runtime image.
-RUN pnpm --filter @tagline-sh/bot --prod deploy /pruned
+RUN pnpm --filter @tagline-sh/bot --prod deploy --legacy /pruned
 
 
 FROM node:24-alpine AS runner
