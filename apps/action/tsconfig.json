@@ -3,7 +3,9 @@
     "include": ["src/**/*", "test/**/*"],
     "compilerOptions": {
         "paths": {
-            "~/app/*": ["./src/*"]
+            "~/app/*": ["./src/*"],
+            "@tagline-sh/shared": ["../../packages/shared/src/index.ts"],
+            "@tagline-sh/shared/*": ["../../packages/shared/src/*"]
         }
     }
 }
