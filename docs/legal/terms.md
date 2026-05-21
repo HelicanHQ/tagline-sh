@@ -1,11 +1,11 @@
 # Terms of Service
 
-> **DRAFT — review with counsel before publishing.** This file is the starting point for the terms that will be served at `tagline.sh/terms`. Placeholders are marked `{{LIKE_THIS}}`.
+<!-- > **DRAFT — review with counsel before publishing.** This file is the working source for the terms that will be served at `tagline.helican.io/terms`. Pre-incorporation: HelicanHQ operates as the maintainer brand; references to "HelicanHQ" should be read as referring to the legal entity that succeeds it on formal incorporation, if and when that occurs. -->
 
-**Effective date:** {{EFFECTIVE_DATE}}
-**Operator:** {{OPERATOR_LEGAL_NAME}} ("we", "us", "Tagline")
+**Effective date:** 2026-05-21
+**Operator:** HelicanHQ ("we", "us", "Tagline")
 
-These terms govern your use of the Tagline GitHub App ("the App"), the hosted bot instance at {{HOSTED_INSTANCE_URL}}, and the published `HelicanHQ/tagline-release-agent-action` GitHub Action ("the Action"). They do not govern your use of the open-source source code published at <https://github.com/HelicanHQ/tagline-sh>, which is licensed separately under the MIT License.
+These terms govern your use of the Tagline GitHub App ("the App"), the hosted bot instance at `tagline.helican.io`, and the published `HelicanHQ/tagline-release-agent-action` GitHub Action ("the Action"). They do not govern your use of the open-source source code published at <https://github.com/HelicanHQ/tagline-sh>, which is licensed separately under the MIT License.
 
 By installing the App on a repository, or by referencing the Action from a workflow file, you agree to these terms.
 
@@ -45,17 +45,17 @@ We do not warrant that release reports will be accurate, that version-bump sugge
 
 ## 7. Limitation of liability
 
-TO THE MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT WILL {{OPERATOR_LEGAL_NAME}} BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR ANY LOSS OF PROFITS OR REVENUES, WHETHER INCURRED DIRECTLY OR INDIRECTLY, OR ANY LOSS OF DATA, USE, GOODWILL, OR OTHER INTANGIBLE LOSSES, RESULTING FROM YOUR USE OF THE APP, THE HOSTED INSTANCE, OR THE ACTION.
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT WILL HELICANHQ BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR ANY LOSS OF PROFITS OR REVENUES, WHETHER INCURRED DIRECTLY OR INDIRECTLY, OR ANY LOSS OF DATA, USE, GOODWILL, OR OTHER INTANGIBLE LOSSES, RESULTING FROM YOUR USE OF THE APP, THE HOSTED INSTANCE, OR THE ACTION.
 
 In jurisdictions that do not permit the exclusion of certain warranties or the limitation of liability for incidental damages, our liability is limited to the maximum extent permitted.
 
 ## 8. Indemnification
 
-You agree to indemnify and hold {{OPERATOR_LEGAL_NAME}} harmless from any claim arising from your use of the App or the Action that is caused by (a) your violation of these terms, (b) content you submit through the App, or (c) your use of AI-generated output without adequate human review.
+You agree to indemnify and hold HelicanHQ harmless from any claim arising from your use of the App or the Action that is caused by (a) your violation of these terms, (b) content you submit through the App, or (c) your use of AI-generated output without adequate human review.
 
 ## 9. Changes to these terms
 
-We may update these terms from time to time. Material changes will be reflected in the `Effective date` above and announced via {{ANNOUNCEMENT_CHANNEL}}. Continued use of the App after a change constitutes acceptance of the updated terms. If you do not accept a change, you may uninstall the App at any time.
+We may update these terms from time to time. Material changes will be reflected in the `Effective date` above and announced via the project's GitHub Releases page and the repository README. Continued use of the App after a change constitutes acceptance of the updated terms. If you do not accept a change, you may uninstall the App at any time.
 
 ## 10. Termination
 
@@ -63,8 +63,8 @@ You may stop using the App at any time by uninstalling it from your repositories
 
 ## 11. Governing law
 
-These terms are governed by the laws of {{GOVERNING_JURISDICTION}}, excluding its conflict-of-laws provisions. Disputes will be brought in the courts of {{GOVERNING_VENUE}}.
+These terms are governed by the laws of the **State of Delaware, United States of America**, without regard to its conflict-of-laws provisions. Disputes arising out of or relating to these terms or the use of the App, the hosted instance, or the Action will be brought exclusively in the state and federal courts of competent jurisdiction located in the State of Delaware, and you consent to the personal jurisdiction of those courts.
 
 ## 12. Contact
 
-Questions about these terms: {{LEGAL_CONTACT_EMAIL}}
+Tagline does not currently operate dedicated mail addresses. Contact channels are listed in the [Privacy Policy → Contact](./privacy.md#contact) section. Questions specifically about these terms should use the [GitHub private vulnerability reporting](https://github.com/HelicanHQ/tagline-sh/security/advisories/new) channel, which we repurpose as the confidential intake for legal and privacy enquiries until HelicanHQ stands up dedicated mail infrastructure.
