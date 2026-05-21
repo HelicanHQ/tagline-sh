@@ -82,6 +82,8 @@ function buildPRBody(plan: ReleasePlan, payload: FinalizePlanPayload): string {
         '',
         '---',
         '',
+        '_New entry — will be prepended above existing entries in `CHANGELOG.md` when this PR merges. Prior history is preserved._',
+        '',
         plan.changelogContent,
         '',
         '---',

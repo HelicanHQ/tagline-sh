@@ -153,7 +153,7 @@ export function reportComment(report: ReleaseReport): string {
 
     lines.push('');
     lines.push('<details>');
-    lines.push('<summary>Changelog preview</summary>');
+    lines.push('<summary>New changelog entry — will be prepended to <code>CHANGELOG.md</code> on release</summary>');
     lines.push('');
     lines.push('```markdown');
     lines.push(report.changelogPreview.trimEnd());
