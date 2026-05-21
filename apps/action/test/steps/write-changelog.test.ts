@@ -104,4 +104,103 @@ describe('writeChangelog', () => {
         expect(rootClog).toContain('api@1.1.0');
         expect(rootClog).toContain('ui@0.5.1');
     });
+
+    // Regression: the transitive case the existing tests don't cover. Two
+    // consecutive runs of writeChangelog (i.e. two consecutive Tagline-cut
+    // releases against the same repo) must both survive in the on-disk
+    // CHANGELOG. A bug where the second run accidentally truncates the first
+    // would pass every other test in this file — but would silently overwrite
+    // changelog history in production after the second release.
+    it('preserves prior entries across consecutive single-repo releases', async () => {
+        // First release: v1.5.0 (no prior CHANGELOG on disk).
+        await writeChangelog(makePlan(), dir);
+
+        // Second release: v1.5.1 — note the new changelogContent.
+        await writeChangelog(
+            makePlan({
+                currentVersion: '1.5.0',
+                nextVersion: '1.5.1',
+                lastTag: 'v1.5.0',
+                changelogContent:
+                    '## [1.5.1] - 2026-05-20\n\n### Fixed\n\n- post-1.5.0 hotfix ([#43](https://gh/pr/43))\n',
+            }),
+            dir,
+        );
+
+        const content = await fs.readFile(path.join(dir, 'CHANGELOG.md'), 'utf8');
+        const idx150 = content.indexOf('## [1.5.0]');
+        const idx151 = content.indexOf('## [1.5.1]');
+        expect(idx151).toBeGreaterThan(-1);
+        expect(idx150).toBeGreaterThan(-1);
+        // Newer entry must appear above older entry.
+        expect(idx151).toBeLessThan(idx150);
+        // The Keep-a-Changelog header must still be present and not duplicated.
+        expect(content.match(/# Changelog/g)?.length).toBe(1);
+    });
+
+    it('preserves prior entries across consecutive monorepo releases (per-package + root)', async () => {
+        await fs.mkdir(path.join(dir, 'packages/api'), { recursive: true });
+        await fs.mkdir(path.join(dir, 'packages/ui'), { recursive: true });
+
+        const firstPlan = makePlan({
+            isMonorepo: true,
+            nextVersion: 'event-2026-05-19',
+            changelogContent:
+                '## [event-2026-05-19] - 2026-05-19\n\nReleased:\n\n- `api@1.1.0`\n',
+            packages: [
+                {
+                    name: 'api',
+                    path: 'packages/api',
+                    packageJsonPath: 'packages/api/package.json',
+                    changelogPath: 'packages/api/CHANGELOG.md',
+                    currentVersion: '1.0.0',
+                    nextVersion: '1.1.0',
+                    bumpType: 'minor',
+                    prs: [],
+                    changelogContent: '## [1.1.0] - 2026-05-19\n\n### Added\n\n- api feature\n',
+                    tagName: 'api@1.1.0',
+                },
+            ],
+        });
+
+        const secondPlan = makePlan({
+            isMonorepo: true,
+            nextVersion: 'event-2026-05-20',
+            changelogContent:
+                '## [event-2026-05-20] - 2026-05-20\n\nReleased:\n\n- `api@1.1.1`\n',
+            packages: [
+                {
+                    name: 'api',
+                    path: 'packages/api',
+                    packageJsonPath: 'packages/api/package.json',
+                    changelogPath: 'packages/api/CHANGELOG.md',
+                    currentVersion: '1.1.0',
+                    nextVersion: '1.1.1',
+                    bumpType: 'patch',
+                    prs: [],
+                    changelogContent: '## [1.1.1] - 2026-05-20\n\n### Fixed\n\n- api hotfix\n',
+                    tagName: 'api@1.1.1',
+                },
+            ],
+        });
+
+        await writeChangelog(firstPlan, dir);
+        await writeChangelog(secondPlan, dir);
+
+        // Per-package CHANGELOG must show BOTH entries, newer first.
+        const apiClog = await fs.readFile(path.join(dir, 'packages/api/CHANGELOG.md'), 'utf8');
+        const apiIdx110 = apiClog.indexOf('## [1.1.0]');
+        const apiIdx111 = apiClog.indexOf('## [1.1.1]');
+        expect(apiIdx111).toBeGreaterThan(-1);
+        expect(apiIdx110).toBeGreaterThan(-1);
+        expect(apiIdx111).toBeLessThan(apiIdx110);
+
+        // Root aggregator CHANGELOG must show BOTH release events, newer first.
+        const rootClog = await fs.readFile(path.join(dir, 'CHANGELOG.md'), 'utf8');
+        const rootIdx19 = rootClog.indexOf('event-2026-05-19');
+        const rootIdx20 = rootClog.indexOf('event-2026-05-20');
+        expect(rootIdx20).toBeGreaterThan(-1);
+        expect(rootIdx19).toBeGreaterThan(-1);
+        expect(rootIdx20).toBeLessThan(rootIdx19);
+    });
 });
