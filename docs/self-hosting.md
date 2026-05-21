@@ -55,6 +55,8 @@ Railway is the recommended hosted target — Tagline ships a [`railway.json`](..
 
     Do **not** set `PRIVATE_KEY_PATH` on Railway — that path is the Docker Compose secret-file convention. Railway has no file-mount primitive, so the bot reads the PEM straight from `PRIVATE_KEY`. Setting both will cause `PRIVATE_KEY_PATH` to win and break startup.
 
+    Do **not** set `WEBHOOK_PROXY_URL` on Railway either. Despite its name, this variable is **local-dev-only** — it tells Probot to subscribe to a [smee.io](https://smee.io) channel as an EventSource client, so webhooks delivered to a public smee URL get proxied to a localhost server. In production GitHub posts webhooks directly to your bot's public URL, so the proxy is the wrong shape entirely. If you set this in production, Probot tries to open an EventSource connection to whatever URL you provided; if it's your own bot's URL the result is either an infinite retry loop or a process crash before the HTTP server stays bound. Either way, `/ping` will never respond and the deploy will time out at the healthcheck.
+
 4. **Generate a public domain** under the service's **Settings → Networking → Generate Domain**. Copy the resulting `https://<your-app>.up.railway.app` URL.
 5. **Point the GitHub App webhook** at `<railway-url>/api/github/webhooks` (Settings → your App → Webhook URL).
 6. **Verify the deploy.** Railway probes `/ping` (configured in `railway.json`) — Probot's built-in liveness route returns `PONG` with HTTP 200. Once that responds, the deploy goes live. Tail logs via `railway logs` or the dashboard; you should see `INFO: Listening on http://:3000`.

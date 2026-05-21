@@ -1,0 +1,38 @@
+# Secrets — these must never enter any layer cache, even transiently.
+*.pem
+.env
+.env.*
+!.env.example
+
+# Build / dependency outputs — rebuilt inside the builder stage.
+node_modules
+**/node_modules
+dist
+**/dist
+coverage
+**/coverage
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+# Editor + OS noise.
+.idea
+.vscode
+.DS_Store
+
+# VCS metadata — the runtime image doesn't need git history.
+.git
+.gitignore
+.github
+
+# Repo-level docs the bot doesn't read at runtime.
+README.md
+CHANGELOG.md
+LICENSE
+docs
+examples
+marketing
+
+# Lock files we already declared in the Dockerfile's explicit COPY list.
+# (Listing here is belt-and-braces — Docker's explicit COPY wins on path
+# matching, but excluding these prevents accidental wide-glob COPYs from
+# slurping them.)
