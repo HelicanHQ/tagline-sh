@@ -1,10 +1,10 @@
 # Privacy Policy
 
-> **DRAFT — review with counsel before publishing.** This file is the starting point for the policy that will be served at `tagline.sh/privacy`. Placeholders are marked `{{LIKE_THIS}}`.
+<!-- > **DRAFT — review with counsel before publishing.** This file is the working source for the policy that will be served at `tagline.helican.io/privacy`. Operational details (subprocessors, AI provider, hosting provider) reflect the configuration in place on the effective date and will be updated as the hosted instance evolves. -->
 
-**Effective date:** {{EFFECTIVE_DATE}}
-**Operator:** {{OPERATOR_LEGAL_NAME}} ("we", "us", "Tagline")
-**Contact:** {{PRIVACY_CONTACT_EMAIL}}
+**Effective date:** 2026-05-21
+**Operator:** HelicanHQ ("we", "us", "Tagline") — the maintainer of Tagline and related developer tooling
+**Contact:** see [Contact](#contact) below. Tagline does not maintain dedicated mail addresses; all contact channels are GitHub-native.
 
 This policy describes what data Tagline processes when you install the Tagline GitHub App on a repository, and what we do — and do not — do with it.
 
@@ -37,7 +37,7 @@ Operational logs (structured JSON via [pino](https://getpino.io)) may contain tr
 
 ## Third-party processors
 
-Tagline forwards the **summary of merged PRs** to an AI provider (OpenAI-compatible API) in order to generate the human-readable narrative portion of each release report. On the hosted instance, this provider is currently {{HOSTED_AI_PROVIDER}}. The data sent to the AI provider is limited to:
+Tagline forwards the **summary of merged PRs** to an AI provider (OpenAI-compatible API) in order to generate the human-readable narrative portion of each release report. On the hosted instance, this provider is currently [OpenRouter](https://openrouter.ai), which in turn dispatches the request to the underlying model provider configured in `AI_MODEL` (e.g. Google, OpenAI, Anthropic). The data sent to OpenRouter is limited to:
 
 - The commit-type-prefix-stripped titles of merged PRs since the last release tag
 - The names of touched packages (for monorepo detection)
@@ -51,11 +51,11 @@ If you **self-host** the bot (a fully supported configuration — see [self-host
 
 The hosted instance currently relies on the following infrastructure providers:
 
-- {{HOSTING_PROVIDER}} — application hosting and TLS termination
-- {{AI_PROVIDER}} — AI-powered release narrative generation
+- [Railway](https://railway.app) — application hosting and TLS termination
+- [OpenRouter](https://openrouter.ai) — AI model routing for release narrative generation
 - GitHub, Inc. — webhook delivery and API access (governed by [GitHub's privacy practices](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement))
 
-We will update this list if subprocessors change. If you need a formal subprocessor notification mechanism, please contact us at {{PRIVACY_CONTACT_EMAIL}}.
+We will update this list if subprocessors change. If you need a formal subprocessor notification mechanism, please open a thread via the private contact channel described in [Contact](#contact) below.
 
 ## Your rights
 
@@ -65,7 +65,7 @@ Because Tagline does not persist personal data, there is no profile or account t
 - **Revoking** the GitHub App's installation token from your organisation's GitHub settings
 - **Self-hosting** — for the strongest possible data sovereignty, run your own instance on your own infrastructure with your own AI provider
 
-If you have specific GDPR, CCPA, or other jurisdictional requests, please contact us at {{PRIVACY_CONTACT_EMAIL}}. We will respond within {{RESPONSE_SLA_DAYS}} days.
+If you have specific GDPR, CCPA, or other jurisdictional requests, please use the confidential channel described in [Contact](#contact) below — we treat GitHub's private vulnerability-reporting facility as the canonical confidential intake for any sensitive enquiry, not just security. We will respond within 30 days.
 
 ## Security
 
@@ -73,14 +73,21 @@ If you have specific GDPR, CCPA, or other jurisdictional requests, please contac
 - The bot's GitHub App private key is stored as a secret at the hosting provider and is not committed to source control.
 - The release action runs entirely inside your GitHub Actions environment; we have no access to your repository's secrets.
 
-We do not currently maintain a formal bug-bounty programme, but security reports are welcomed at {{SECURITY_CONTACT_EMAIL}}. Please give us a reasonable disclosure window before public posting.
+We do not currently maintain a formal bug-bounty programme, but security reports are welcomed via GitHub's [private vulnerability reporting](https://github.com/HelicanHQ/tagline-sh/security/advisories/new). Please give us a reasonable disclosure window before public posting.
 
 ## Changes to this policy
 
-Material changes will be announced via {{ANNOUNCEMENT_CHANNEL}} and reflected in the `Effective date` above. If a change materially expands what data we process or transmit, we will notify active installations directly through the GitHub App.
+Material changes will be announced via the project's GitHub Releases page and the repository README, and reflected in the `Effective date` above. If a change materially expands what data we process or transmit, we will notify active installations directly through the GitHub App.
 
 ## Contact
 
-Privacy enquiries: {{PRIVACY_CONTACT_EMAIL}}
-Security: {{SECURITY_CONTACT_EMAIL}}
-General: {{SUPPORT_CONTACT_EMAIL}}
+Tagline does not currently operate dedicated mail addresses. All contact runs through GitHub:
+
+| Category                             | Channel                                                                                                                                                                                                                                                                      |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Privacy enquiries (confidential)** | [GitHub private vulnerability reporting](https://github.com/HelicanHQ/tagline-sh/security/advisories/new) — repurposed as the confidential intake for GDPR/CCPA and other data-subject requests, since GitHub does not yet offer a separate per-repo private message channel |
+| **Security vulnerabilities**         | Same channel: [GitHub private vulnerability reporting](https://github.com/HelicanHQ/tagline-sh/security/advisories/new)                                                                                                                                                      |
+| **General questions**                | [GitHub Discussions](https://github.com/HelicanHQ/tagline-sh/discussions)                                                                                                                                                                                                    |
+| **Bug reports**                      | [GitHub Issues](https://github.com/HelicanHQ/tagline-sh/issues)                                                                                                                                                                                                              |
+
+This contact model will be revisited once HelicanHQ stands up dedicated mail infrastructure; until then, the GitHub channels above are authoritative.
