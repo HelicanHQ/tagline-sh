@@ -164,7 +164,7 @@ describe('buildPackagePlans — semver', () => {
     });
 });
 
-describe('buildPackagePlans — calver/incremental include ANY package with PRs', () => {
+describe('buildPackagePlans — calver', () => {
     const calverConfig: RepoConfig = {
         ...DEFAULT_CONFIG,
         versioning: { scheme: 'calver', pattern: 'YYYY.MM.MICRO' },
@@ -208,6 +208,104 @@ describe('buildPackagePlans — calver/incremental include ANY package with PRs'
         expect(api.nextVersion).toBe('2026.5.1');
         // ui was last released in April, MICRO resets: 2026.4.0 → 2026.5.0
         expect(ui.nextVersion).toBe('2026.5.0');
+    });
+
+    it('excludes a package with zero attributed PRs on calver', () => {
+        // The inclusion gate at package-planner.ts:52 fires before any scheme
+        // math runs — a package with `affectedPRs: []` must never appear in
+        // the plan, regardless of scheme. Without this regression, a future
+        // refactor that moved the scheme check before the PR-count check
+        // would silently start releasing untouched packages on every calver
+        // run (because calver math always produces a "next" version from
+        // `now`, even with no PRs).
+        const info = semverMonorepo({
+            api: { current: '2026.5.0', prs: [makePR({ number: 71, bump: 'patch' })] },
+            ui: { current: '2026.4.0', prs: [] },
+        });
+        const plans = buildPackagePlans({
+            monorepoInfo: info,
+            branch: 'main',
+            config: calverConfig,
+            now: new Date(Date.UTC(2026, 4, 19, 12, 0, 0)),
+        });
+        expect(plans).toHaveLength(1);
+        expect(plans[0]!.name).toBe('@acme/api');
+        expect(plans.find((p) => p.name === '@acme/ui')).toBeUndefined();
+    });
+});
+
+describe('buildPackagePlans — incremental', () => {
+    const incrementalConfig: RepoConfig = {
+        ...DEFAULT_CONFIG,
+        versioning: { scheme: 'incremental', pattern: null },
+    };
+
+    it('includes a chore-only package on incremental (mechanical math)', () => {
+        const info = semverMonorepo({
+            api: {
+                current: '5',
+                prs: [makePR({ number: 71, bump: 'none', commitType: 'chore' })],
+            },
+        });
+        const plans = buildPackagePlans({
+            monorepoInfo: info,
+            branch: 'main',
+            config: incrementalConfig,
+        });
+        expect(plans).toHaveLength(1);
+        // Incremental ignores bumpType; counter increments regardless.
+        expect(plans[0]!.nextVersion).toBe('6');
+    });
+
+    it('per-package counter increments independently (parallel to the calver case)', () => {
+        // api is at counter 5; ui is at counter 12. Both ship together.
+        // Each must advance based on its OWN current value, not a shared one.
+        const info = semverMonorepo({
+            api: { current: '5', prs: [makePR({ number: 71, bump: 'minor' })] },
+            ui: { current: '12', prs: [makePR({ number: 72, bump: 'patch' })] },
+        });
+        const plans = buildPackagePlans({
+            monorepoInfo: info,
+            branch: 'main',
+            config: incrementalConfig,
+        });
+        const api = plans.find((p) => p.name === '@acme/api')!;
+        const ui = plans.find((p) => p.name === '@acme/ui')!;
+        expect(api.nextVersion).toBe('6');
+        expect(ui.nextVersion).toBe('13');
+    });
+
+    it('excludes a package with zero attributed PRs on incremental', () => {
+        // Same invariant as calver: the PR-count gate must fire before the
+        // scheme math regardless of scheme. Locks the inclusion ordering
+        // explicitly for the incremental path.
+        const info = semverMonorepo({
+            api: { current: '5', prs: [makePR({ number: 71, bump: 'patch' })] },
+            ui: { current: '12', prs: [] },
+        });
+        const plans = buildPackagePlans({
+            monorepoInfo: info,
+            branch: 'main',
+            config: incrementalConfig,
+        });
+        expect(plans).toHaveLength(1);
+        expect(plans[0]!.name).toBe('@acme/api');
+    });
+
+    it('tag names embed the per-package incremental version', () => {
+        // Sanity check that the per-package tag string flows through correctly
+        // for non-semver schemes — `packageTagName` is scheme-agnostic in
+        // principle, but this is the kind of "should be obvious" coupling
+        // that breaks silently if someone special-cases on version shape.
+        const info = semverMonorepo({
+            api: { current: '5', prs: [makePR({ number: 71, bump: 'minor' })] },
+        });
+        const plans = buildPackagePlans({
+            monorepoInfo: info,
+            branch: 'main',
+            config: incrementalConfig,
+        });
+        expect(plans[0]!.tagName).toBe('@acme/api@6');
     });
 });
 
