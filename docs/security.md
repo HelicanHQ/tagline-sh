@@ -1,6 +1,6 @@
 # Security & supply-chain guidance
 
-Tagline ships in two halves: the **bot** (a GitHub App you install or self-host) and the **action** (`HelicanHQ/tagline-release-agent-action`, referenced from your workflow YAML). Each half has a different trust model — this doc spells them out.
+Tagline ships in two halves: the **bot** (a GitHub App you install or self-host) and the **action** (`HelicanHQ/tagline-release-agent-action`, referenced from your workflow YAML). Each half has a different trust model, this doc spells them out.
 
 ## The action is what runs in your CI
 
@@ -20,10 +20,10 @@ This is the same pattern used by `actions/checkout@v4`, `actions/setup-node@v4`,
 
 ## SHA pinning (for paranoid environments)
 
-If your organization requires every action reference to be pinned to a specific commit SHA — common in regulated environments, supply-chain-attack-conscious orgs, or anyone running [Dependabot's `version-updates` for `github-actions`](https://docs.github.com/en/code-security/dependabot/working-with-dependabot/keeping-your-actions-up-to-date-with-dependabot) — pin the SHA instead:
+If your organization requires every action reference to be pinned to a specific commit SHA, common in regulated environments, supply-chain-attack-conscious orgs, or anyone running [Dependabot's `version-updates` for `github-actions`](https://docs.github.com/en/code-security/dependabot/working-with-dependabot/keeping-your-actions-up-to-date-with-dependabot) — pin the SHA instead:
 
 ```yaml
-- uses: HelicanHQ/tagline-release-agent-action@<full-40-char-sha>  # v1.2.3
+- uses: HelicanHQ/tagline-release-agent-action@<full-40-char-sha> # v1.2.3
 ```
 
 The trailing comment is the convention Dependabot reads; it auto-bumps the SHA when a new release tag lands and includes the human-readable version in the PR.
@@ -41,9 +41,9 @@ The example workflow grants:
 
 ```yaml
 permissions:
-    contents: write       # commit version bumps; push the release branch; create tags + releases
-    pull-requests: write  # open the release PR
-    issues: write         # post acknowledgement + close the release-tracking issue
+    contents: write # commit version bumps; push the release branch; create tags + releases
+    pull-requests: write # open the release PR
+    issues: write # post acknowledgement + close the release-tracking issue
 ```
 
 These are the minimum required. Tagline does NOT need (and should not be granted):
@@ -59,14 +59,14 @@ If your org enforces "least-privilege workflow permissions" via repo or org sett
 
 If you install the hosted bot (`github.com/apps/tagline-sh`), it requests:
 
-| Permission | Why |
-|---|---|
-| `Contents: Read` | Read PR diffs, conventional commits, `.release-agent.md`, `package.json`. |
-| `Contents: Write` | Open the Configure Tagline PR on install (adds `.release-agent.md`). |
-| `Issues: Read & Write` | Manage the release-tracking issue (open, update body, close, label). |
-| `Pull Requests: Read & Write` | Open the Configure PR; read PR metadata for reports. |
-| `Actions: Read & Write` | Dispatch the `release-agent.yml` workflow on `/approve`. |
-| `Metadata: Read` | Required for any App; lists installed repos. |
+| Permission                    | Why                                                                       |
+| ----------------------------- | ------------------------------------------------------------------------- |
+| `Contents: Read`              | Read PR diffs, conventional commits, `.release-agent.md`, `package.json`. |
+| `Contents: Write`             | Open the Configure Tagline PR on install (adds `.release-agent.md`).      |
+| `Issues: Read & Write`        | Manage the release-tracking issue (open, update body, close, label).      |
+| `Pull Requests: Read & Write` | Open the Configure PR; read PR metadata for reports.                      |
+| `Actions: Read & Write`       | Dispatch the `release-agent.yml` workflow on `/approve`.                  |
+| `Metadata: Read`              | Required for any App; lists installed repos.                              |
 
 The bot does NOT request `workflows: write` — meaning it cannot create or modify files under `.github/workflows/`. The Configure PR ships only `.release-agent.md`; the workflow YAML is for the user to copy in (it's embedded in the PR body for that purpose).
 

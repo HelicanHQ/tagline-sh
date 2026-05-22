@@ -10,13 +10,13 @@ Only the **bot server**. The action is published as `HelicanHQ/tagline-release-a
 
 Create a GitHub App at <https://github.com/settings/apps/new>.
 
-| Field | Value |
-|-------|-------|
-| Name | Whatever you like (e.g. `mycorp-tagline`) |
-| Webhook URL | The public URL of your bot server + `/api/github/webhooks` |
-| Webhook secret | Any random 32-char string — save it |
+| Field                  | Value                                                                                                                      |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Name                   | Whatever you like (e.g. `mycorp-tagline`)                                                                                  |
+| Webhook URL            | The public URL of your bot server + `/api/github/webhooks`                                                                 |
+| Webhook secret         | Any random 32-char string — save it                                                                                        |
 | Repository permissions | `Contents: Read & Write`, `Issues: Read & Write`, `Pull Requests: Read & Write`, `Actions: Read & Write`, `Metadata: Read` |
-| Events | `issue_comment`, `pull_request`, `installation` |
+| Events                 | `issue_comment`, `pull_request`, `installation`                                                                            |
 
 After creation, generate a private key (`.pem` file) and copy the App ID.
 
@@ -37,21 +37,21 @@ The container listens on port 3000 by default. Front it with your reverse proxy 
 
 ### With Railway
 
-Railway is the recommended hosted target — Tagline ships a [`railway.json`](../railway.json) that points at the same `Dockerfile`, so you get the same multi-stage build the Compose path uses, with a managed TLS endpoint and zero infrastructure to operate.
+Railway is the recommended hosted target. Tagline ships a [`railway.json`](../railway.json) that points at the same `Dockerfile`, so you get the same multi-stage build the Compose path uses, with a managed TLS endpoint and zero infrastructure to operate.
 
 1. **Fork or clone** this repo into your own GitHub account or organisation.
 2. **Create a Railway project** at <https://railway.app/new> → "Deploy from GitHub repo" → pick your fork. Railway will detect `railway.json` and use the Dockerfile.
 3. **Set the variables** in the Railway project's **Variables** tab:
 
-    | Variable | Value |
-    |----------|-------|
-    | `APP_ID` | From your GitHub App settings page |
-    | `PRIVATE_KEY` | Paste the full PEM **including** the `-----BEGIN/END-----` lines. Railway's variable input accepts multi-line values verbatim — no escaping, no `\n` substitution. |
-    | `WEBHOOK_SECRET` | The 32+ random byte string you registered with the GitHub App |
-    | `AI_API_KEY` | Your OpenAI-compatible API key (OpenRouter, OpenAI, Groq, etc.) |
-    | `AI_BASE_URL` *(optional)* | Defaults to `https://openrouter.ai/api/v1`. Override per provider — see [BYOK for the AI](#byok-for-the-ai). |
-    | `AI_MODEL` *(optional)* | Defaults to `openai/gpt-4o-mini`. |
-    | `LOG_LEVEL` *(optional)* | `info` in steady state; `debug` while bringing up. |
+    | Variable                   | Value                                                                                                                                                              |
+    | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+    | `APP_ID`                   | From your GitHub App settings page                                                                                                                                 |
+    | `PRIVATE_KEY`              | Paste the full PEM **including** the `-----BEGIN/END-----` lines. Railway's variable input accepts multi-line values verbatim — no escaping, no `\n` substitution. |
+    | `WEBHOOK_SECRET`           | The 32+ random byte string you registered with the GitHub App                                                                                                      |
+    | `AI_API_KEY`               | Your OpenAI-compatible API key (OpenRouter, OpenAI, Groq, etc.)                                                                                                    |
+    | `AI_BASE_URL` _(optional)_ | Defaults to `https://openrouter.ai/api/v1`. Override per provider — see [BYOK for the AI](#byok-for-the-ai).                                                       |
+    | `AI_MODEL` _(optional)_    | Defaults to `openai/gpt-4o-mini`.                                                                                                                                  |
+    | `LOG_LEVEL` _(optional)_   | `info` in steady state; `debug` while bringing up.                                                                                                                 |
 
     Do **not** set `PRIVATE_KEY_PATH` on Railway — that path is the Docker Compose secret-file convention. Railway has no file-mount primitive, so the bot reads the PEM straight from `PRIVATE_KEY`. Setting both will cause `PRIVATE_KEY_PATH` to win and break startup.
 

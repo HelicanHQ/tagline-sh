@@ -1,6 +1,6 @@
 # Getting started
 
-Tagline is a GitHub-native release-management agent. It reads merged PRs since the last release tag, generates a human-readable report with an AI-reasoned version bump suggestion, and — once you approve with a slash command — executes the release end-to-end.
+Tagline is a GitHub-native release-management agent. It reads merged PRs since the last release tag, generates a human-readable report with an AI-reasoned version bump suggestion, and once you approve with a slash command, executes the release end-to-end.
 
 This guide gets you from zero to a real release in about five minutes.
 
@@ -21,6 +21,9 @@ Install **Tagline** on the repo you want to release. Use either:
 When the app is installed it opens a **Configure Tagline** pull request on each repo. The PR adds a default `.release-agent.md` and the body explains the entire release flow with a copy-pasteable workflow YAML block. Merge it (after editing the config to taste) and you're set up. Slash commands posted on the Configure PR itself are ignored — the bot opens a dedicated **release-tracking issue** later, once the first feature PR merges (see Step 5).
 
 ## Step 2 — add the workflow
+
+> [!NOTE]
+> After installing the app, you'll see that the Configure Tagline PR already includes the workflow file and the `.release-agent.md` file. If you merge that PR, you can skip this step. If you want to set up the workflow yourself, copy the YAML block from the Configure PR body or from the example files linked below.
 
 Copy [`examples/single-repo/.github/workflows/release-agent.yml`](../examples/single-repo/.github/workflows/release-agent.yml) to your repo at the same path. For monorepos, use the [`monorepo` example](../examples/monorepo/.github/workflows/release-agent.yml) — the logic is identical; Tagline detects your monorepo flavor automatically.
 
@@ -46,6 +49,9 @@ The example workflow files already include these. If you build your own workflow
 
 ## Step 3 — set the AI secret
 
+> [!NOTE]
+> Skip this step if you don't want to self-host
+
 Tagline calls an **OpenAI-compatible** endpoint for the report's reasoning. Any provider works — OpenAI, OpenRouter, Anthropic via proxy, Groq, Ollama.
 
 Set the following repo or org secret:
@@ -54,7 +60,7 @@ Set the following repo or org secret:
 | ------------- | --------- | ------------------------------ |
 | `AI_API_KEY`  | yes       | —                              |
 | `AI_BASE_URL` | no        | `https://openrouter.ai/api/v1` |
-| `AI_MODEL`    | no        | `openai/gpt-4o-mini`           |
+| `AI_MODEL`    | no        | `google/gemini-3.1-flash-lite` |
 
 If `AI_API_KEY` is unset, Tagline falls back to a deterministic report generated from your commit history with `reasoning: "AI unavailable — manual review required"`.
 

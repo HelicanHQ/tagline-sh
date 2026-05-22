@@ -3,8 +3,11 @@
     "version": "v0.1.1",
     "private": true,
     "type": "module",
-    "description": "Open-source GitHub-native AI agent that configures and automates the thinking step of the software release process — not just the mechanics",
-    "author": "Moeen Mahmud",
+    "description": "Manage your versioning with a GitHub-native release agent. Minimize the gap between developers and users.",
+    "author": {
+        "name": "Moeen Mahmud",
+        "email": "moeen@osmynt.dev"
+    },
     "license": "MIT",
     "packageManager": "pnpm@10.22.0",
     "engines": {
