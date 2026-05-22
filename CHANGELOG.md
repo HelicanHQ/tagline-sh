@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Released:
 
+- `@tagline-sh/action@0.3.0` — see [apps/action/CHANGELOG.md](apps/action/CHANGELOG.md)
+- `@tagline-sh/bot@0.3.0` — see [apps/bot/CHANGELOG.md](apps/bot/CHANGELOG.md)
+
+## [event-2026-05-22] - 2026-05-22
+
+Released:
+
 - `@tagline-sh/action@0.2.0` — see [apps/action/CHANGELOG.md](apps/action/CHANGELOG.md)
 - `@tagline-sh/bot@0.2.0` — see [apps/bot/CHANGELOG.md](apps/bot/CHANGELOG.md)
 
