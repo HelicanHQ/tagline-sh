@@ -41,17 +41,17 @@ If the AI provider is unavailable, the report is still generated deterministical
 
 Trigger a release.
 
-| Form | Effect |
-|------|--------|
-| `/approve` | Use the version Tagline suggested in the last report. |
-| `/approve patch` | Force a patch bump. *(semver only — see below)* |
-| `/approve minor` | Force a minor bump. *(semver only)* |
-| `/approve major` | Force a major bump. *(semver only)* |
-| `/approve as 2026.6.0` | Force an exact version. Works on every scheme. |
-| `/approve --draft` | Create the GitHub release as a draft. |
-| `/approve --dry-run` | Simulate everything; post a diff preview but make no changes. |
-| `/approve minor --draft` | Combine flags freely. |
-| `/approve as 2026.6.0 --dry-run` | `as` combines with flags too. |
+| Form                             | Effect                                                        |
+| -------------------------------- | ------------------------------------------------------------- |
+| `/approve`                       | Use the version Tagline suggested in the last report.         |
+| `/approve patch`                 | Force a patch bump. _(semver only — see below)_               |
+| `/approve minor`                 | Force a minor bump. _(semver only)_                           |
+| `/approve major`                 | Force a major bump. _(semver only)_                           |
+| `/approve as 2026.6.0`           | Force an exact version. Works on every scheme.                |
+| `/approve --draft`               | Create the GitHub release as a draft.                         |
+| `/approve --dry-run`             | Simulate everything; post a diff preview but make no changes. |
+| `/approve minor --draft`         | Combine flags freely.                                         |
+| `/approve as 2026.6.0 --dry-run` | `as` combines with flags too.                                 |
 
 `patch` / `minor` / `major` are only meaningful when your `.release-agent.md` declares `scheme: semver` (the default). On a calver or incremental repo, Tagline rejects them with a usage hint and asks you to use `/approve` or `/approve as <version>` instead — see [configuration / Versioning](./configuration.md).
 
@@ -65,7 +65,7 @@ The action does the writes in your CI environment, in two phases:
 
 **Phase A (propose, on `workflow_dispatch`):** bumps `package.json`, prepends `CHANGELOG.md`, commits with `[skip ci]`, pushes a `release/vX.Y.Z` branch, and opens a PR back to your production branch. The PR body carries the plain-language summary, the technical changelog, and a hidden machine-readable plan marker that Phase B reads. **No tag is created. No GitHub Release is published.** The acknowledgement comment is updated with a `Preview (will publish on merge)` block, framing the release as a proposal.
 
-**Phase B (finalize, on `push` to the production branch):** when you merge the release PR, the resulting push triggers the action again. (GitHub suppresses `pull_request: closed` events on PRs the action itself opened, so we trigger on `push` and self-filter to the release-PR merge commit.) The action parses the plan marker out of the PR body, creates the tag at the *merge commit* (so it lands on `main`, not on an orphan branch), publishes the GitHub Release (with the plain-language summary above the technical changelog), posts a **Released! 🎉** comment on the release-tracking issue containing a **Ready to share** block — the summary formatted for direct paste into Slack, email, or any product-changelog tool — and then removes the `tagline:release-pending` label and closes the issue. Closing the PR without merging cancels the release entirely.
+**Phase B (finalize, on `push` to the production branch):** when you merge the release PR, the resulting push triggers the action again. (GitHub suppresses `pull_request: closed` events on PRs the action itself opened, so we trigger on `push` and self-filter to the release-PR merge commit.) The action parses the plan marker out of the PR body, creates the tag at the _merge commit_ (so it lands on `main`, not on an orphan branch), publishes the GitHub Release (with the plain-language summary above the technical changelog), posts a **Released! 🎉** comment on the release-tracking issue containing a **Ready to share** block — the summary formatted for direct paste into Slack, email, or any product-changelog tool — and then removes the `tagline:release-pending` label and closes the issue. Closing the PR without merging cancels the release entirely.
 
 ### Error cases
 
@@ -75,8 +75,8 @@ The action does the writes in your CI environment, in two phases:
 - A bump word (`patch`/`minor`/`major`) used on a non-semver repo → bot replies explaining the active scheme and the alternatives (`/approve` or `/approve as <version>`).
 - Tag already exists when Phase B runs → action logs `Reference already exists` for that tag and skips it idempotently. Re-running the workflow on the same merge SHA is safe.
 - Phase B logs `could not find the embedded plan marker in the release PR body` → the release PR body was edited by hand or the PR wasn't opened by Tagline. Phase B refuses to tag/release rather than guess. Re-run Phase A by closing the PR and starting a new `/approve`.
-- Action logs `Resource not accessible by integration` → your workflow `permissions:` block is missing one of `contents: write`, `pull-requests: write`, or `issues: write`. See [Required workflow permissions](./getting-started.md#required-workflow-permissions). If the failure is *specifically* on the acknowledgement comment, Phase A still succeeded — the bot just couldn't post the courtesy comment.
-- Action logs `GitHub Actions is not permitted to create or approve pull requests` → separate from `permissions:`. Enable the toggle at *Settings → Actions → General → Workflow permissions → "Allow GitHub Actions to create and approve pull requests"* (and the same setting at org level if your repo lives in an org). Phase A pushes the release branch even if the PR open fails — the acknowledgement comment now includes a direct `compare` URL to open the missing PR by hand. Once that PR is merged, Phase B finalizes normally.
+- Action logs `Resource not accessible by integration` → your workflow `permissions:` block is missing one of `contents: write`, `pull-requests: write`, or `issues: write`. See [Required workflow permissions](./getting-started.md#required-workflow-permissions). If the failure is _specifically_ on the acknowledgement comment, Phase A still succeeded — the bot just couldn't post the courtesy comment.
+- Action logs `GitHub Actions is not permitted to create or approve pull requests` → separate from `permissions:`. Enable the toggle at _Settings → Actions → General → Workflow permissions → "Allow GitHub Actions to create and approve pull requests"_ (and the same setting at org level if your repo lives in an org). Phase A pushes the release branch even if the PR open fails — the acknowledgement comment now includes a direct `compare` URL to open the missing PR by hand. Once that PR is merged, Phase B finalizes normally.
 
 ## Comment lifecycle
 
