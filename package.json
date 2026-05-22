@@ -3,7 +3,7 @@
     "version": "0.0.0",
     "private": true,
     "type": "module",
-    "description": "Manage your versioning with Github native release agent. Minimize the gap between developers and users.",
+    "description": "Manage your versioning with a GitHub-native release agent. Minimize the gap between developers and users.",
     "author": {
         "name": "Moeen Mahmud",
         "email": "moeen@osmynt.dev"

@@ -1,6 +1,6 @@
-# Tagline: GitHub-native release-management agent.
+# Tagline: GitHub-native release-management agent
 
-> Manage your versioning with Github native release agent. Minimize the gap between developers and users.
+> Manage your versioning with a GitHub-native release agent. Minimize the gap between developers and users.
 
 ![Feature Card](./assets//feature-card/tagline-feature-card.png)
 
