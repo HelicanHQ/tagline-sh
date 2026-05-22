@@ -47,6 +47,86 @@ describe('getLastReleaseTag', () => {
         const tag = await getLastReleaseTag(reader, ANY_REPO);
         expect(tag?.name).toBe('v1.0.0');
     });
+
+    // Monorepo / migration regressions ---------------------------------------
+    //
+    // The bug that surfaced these tests: a repo that migrated from single-repo
+    // (where `v1.0.0` was the live tag) to per-package monorepo tags (like
+    // `@tagline-sh/bot@0.1.0`) was still resolving "last release" to `v1.0.0`
+    // because the SEMVER_TAG_RE didn't recognize the `@scope/name@version`
+    // shape. That made the release-issue title read "5 changes since v1.0.0"
+    // even though three per-package releases had happened since.
+
+    it('recognizes scoped per-package tags (Changesets-style)', async () => {
+        const reader = new FakeGitHubReader({
+            tags: [
+                { name: '@acme/api@1.0.0', sha: 'a', commitDate: '2026-05-01T00:00:00Z' },
+                { name: '@acme/ui@0.5.0', sha: 'b', commitDate: '2026-05-15T00:00:00Z' },
+            ],
+        });
+        const tag = await getLastReleaseTag(reader, ANY_REPO);
+        // Per-package tags sort by commit date; ui shipped later.
+        expect(tag?.name).toBe('@acme/ui@0.5.0');
+    });
+
+    it('recognizes unscoped per-package tags', async () => {
+        const reader = new FakeGitHubReader({
+            tags: [
+                { name: 'api@1.0.0', sha: 'a', commitDate: '2026-05-01T00:00:00Z' },
+                { name: 'webapp@2.3.0', sha: 'b', commitDate: '2026-05-15T00:00:00Z' },
+            ],
+        });
+        const tag = await getLastReleaseTag(reader, ANY_REPO);
+        expect(tag?.name).toBe('webapp@2.3.0');
+    });
+
+    it('prefers the most recent per-package tag when v* legacy tags exist (the migration case)', async () => {
+        // The exact failure shape: legacy v1.0.0 from before monorepo
+        // mode, then per-package tags from the new release line. Without
+        // commit-date sort in the mixed case, the old code picked v1.0.0
+        // because it semver-sorted higher than the per-package versions
+        // (which use independent version namespaces).
+        const reader = new FakeGitHubReader({
+            tags: [
+                { name: 'v1.0.0', sha: 'legacy', commitDate: '2026-03-01T00:00:00Z' },
+                { name: '@tagline-sh/action@0.1.0', sha: 'a', commitDate: '2026-05-21T00:00:00Z' },
+                { name: '@tagline-sh/bot@0.1.0', sha: 'b', commitDate: '2026-05-21T00:00:00Z' },
+                { name: '@tagline-sh/shared@0.1.0', sha: 'c', commitDate: '2026-05-21T00:00:00Z' },
+            ],
+        });
+        const tag = await getLastReleaseTag(reader, ANY_REPO);
+        // Any of the three per-package tags is acceptable — they share a
+        // commit date. The critical assertion is that v1.0.0 is NOT picked.
+        expect(tag?.name).not.toBe('v1.0.0');
+        expect(tag?.name).toMatch(/^@tagline-sh\/(action|bot|shared)@0\.1\.0$/);
+    });
+
+    it('rejects arbitrary name@something tags that aren\'t valid semver versions', async () => {
+        const reader = new FakeGitHubReader({
+            tags: [
+                { name: 'feature@experiment', sha: 'a', commitDate: 't' },
+                { name: 'release@beta', sha: 'b', commitDate: 't' },
+                { name: 'v1.0.0', sha: 'c', commitDate: 't' },
+            ],
+        });
+        const tag = await getLastReleaseTag(reader, ANY_REPO);
+        expect(tag?.name).toBe('v1.0.0');
+    });
+
+    it('falls back to commit-date sort when only per-package tags exist (no legacy v*)', async () => {
+        // Pure monorepo case: every tag is per-package, no legacy single-repo
+        // tag in the mix. The commit-date path still has to fire (semver sort
+        // across different package namespaces would be meaningless).
+        const reader = new FakeGitHubReader({
+            tags: [
+                { name: '@acme/api@1.5.0', sha: 'a', commitDate: '2026-04-01T00:00:00Z' },
+                { name: '@acme/ui@0.9.0', sha: 'b', commitDate: '2026-05-10T00:00:00Z' },
+                { name: '@acme/api@1.6.0', sha: 'c', commitDate: '2026-05-15T00:00:00Z' },
+            ],
+        });
+        const tag = await getLastReleaseTag(reader, ANY_REPO);
+        expect(tag?.name).toBe('@acme/api@1.6.0');
+    });
 });
 
 describe('getCurrentVersion', () => {
