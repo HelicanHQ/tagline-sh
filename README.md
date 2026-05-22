@@ -1,16 +1,42 @@
 # Tagline: GitHub-native release-management agent
 
-> Manage your versioning with a GitHub-native release agent. Minimize the gap between developers and users.
+> Close the gap between developer changelogs and user release notes — without leaving GitHub.
 
-![Feature Card](./assets//feature-card/tagline-feature-card.png)
+![Feature Card](./assets/feature-card/tagline-feature-card.png)
 
-We're trying to minimize the gap between developers and users.
+> "The CHANGELOG is for the developers and the RELEASE NOTES are for the users." — [Keep a Changelog](https://keepachangelog.com/en/1.0.0/#release-notes-vs-changelog)
 
-> "The CHANGELOG is for the developers and the RELEASE NOTES are for the users." - [Keep a Changelog](https://keepachangelog.com/en/1.0.0/#release-notes-vs-changelog)
-
-Most release tools (semantic-release, changesets) automate what happens _after_ you decide to release. Tagline closes the gap before that decision: it reads merged PRs since your last tag, understands conventional commits, generates a human-readable report with an AI-reasoned version bump suggestion, and — once you `/approve` — runs the release end-to-end.
+Most release tools (semantic-release, Changesets, release-please) automate what happens _after_ you decide to release. They produce a technically-correct changelog that nobody outside your team reads, and you end up writing the customer-facing version manually anyway. Tagline closes both gaps in one pass: it reads merged PRs since your last tag, understands conventional commits, generates **both** a technical changelog **and** a plain-language summary (with an AI-reasoned version bump suggestion), and — once you `/approve` — runs the release end-to-end.
 
 You stay in control. The bot only suggests; the action only runs on your explicit approval.
+
+## See it in action
+
+The four moments below show the full release cycle, from the first install through the published release. All slash commands happen on **one canonical GitHub Issue** per release cycle — no dashboard, no separate UI.
+
+### 1. The bot opens a `Configure Tagline` PR on install
+
+It drops a default `.release-agent.md` config and a workflow file template into a single PR for you to review and merge. One artifact, one decision, no surprises.
+
+![Initial PR Tagline opens after install](./assets/screenshots/initial-pr-after-installing-tagline.png)
+
+### 2. After a PR merges, Tagline opens a release-tracking issue
+
+Labelled `tagline:release-pending`. The body lists every merged PR since the last release, with a quick-reference for the slash commands. This is the **canonical venue** — every `/release-report` and `/approve` for this release cycle happens here.
+
+![Tagline opened a release-tracking issue](./assets/screenshots/tagline-opened-an-issue.png)
+
+### 3. Comment `/release-report` and the bot replies with the full plan
+
+Per-package bump suggestions, the AI-reasoned narrative, the technical changelog preview, **and** the plain-language summary you can paste straight into Slack or your customer changelog.
+
+![Tagline-generated release report](./assets/screenshots/tagline-generated-release-report.png)
+
+### 4. Comment `/approve` and the release runs end-to-end
+
+The action opens a release PR in your repo (with your `GITHUB_TOKEN`, under your audit log). Review it, merge it, and Tagline tags the merge commit, publishes the GitHub Release, and closes the tracking issue with the "Ready to share" summary.
+
+![Tagline release process](./assets/screenshots/tagline-release-process.png)
 
 ## How it works
 
@@ -50,7 +76,7 @@ Technical Lead reviews the PR, merges it (or closes it to cancel)
 Nothing is tagged or published until the release PR is merged. The bot **never writes** to your repo. Only the action does, and only inside your own CI with your own `GITHUB_TOKEN`. Your branch protections and audit log stay intact.
 
 > [!IMPORTANT]
-> Make sure you gave write permission and allowed the action to create pull request
+> Make sure your workflow gives the action `contents: write` and `pull-requests: write` permissions, and that the repo allows GitHub Actions to create pull requests (Settings → Actions → General → Workflow permissions).
 
 Slash commands work **only** on the bot-managed release-tracking issue (identified by the `tagline:release-pending` label plus a hidden marker in the issue body). Comments anywhere else are ignored silently — no notification spam.
 
@@ -58,7 +84,7 @@ Slash commands work **only** on the bot-managed release-tracking issue (identifi
 
 1. Install the [Tagline GitHub App](https://github.com/apps/tagline-sh) on a repo. (Or [self-host](./docs/self-hosting.md).)
 2. The Bot will automatically create a pull request if the repo doesn't have `.release-agent.md` config file and suggest a workflow template. Merge it to get a config file in place. Or you can copy [`examples/single-repo/.github/workflows/release-agent.yml`](./examples/single-repo/.github/workflows/release-agent.yml) into your repo. (Monorepo? Use [`examples/monorepo/...`](./examples/monorepo/.github/workflows/release-agent.yml).)
-3. Add an `AI_API_KEY` repo secret. Any OpenAI-compatible provider: OpenAI, OpenRouter, Groq, Ollama, Anthropic via proxy if self you self host. Otherwise, it won't be needed.
+3. **Only if you self-host:** add an `AI_API_KEY` repo secret. Any OpenAI-compatible provider works — OpenAI, OpenRouter, Groq, Ollama, Anthropic via proxy. On the hosted instance the key is managed for you.
 4. Merge a PR. Tagline opens a `🚀 Release pending` issue.
 5. Comment `/release-report` on that issue, then `/approve` to ship.
 
@@ -150,7 +176,7 @@ MIT — see [LICENSE](./LICENSE). Self-hosting is a feature, not a threat.
 ### Try the GREAT alternatives
 
 - [Semantic Release](https://github.com/semantic-release/semantic-release)
-- [Changesets](github.com/changesets/changesets)
+- [Changesets](https://github.com/changesets/changesets)
 - [Release Please](https://github.com/googleapis/release-please)
 - [Release Drafter](https://github.com/release-drafter/release-drafter)
 - [CHANGELOG.MD](https://changelog.md/)
