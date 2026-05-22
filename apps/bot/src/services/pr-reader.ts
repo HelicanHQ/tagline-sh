@@ -8,29 +8,70 @@ import type {
 import { parsePR } from '~/app/services/commit-parser';
 import { isReleaseBranch, type ParsedPR } from '@tagline-sh/shared';
 
-// Matches `v1.2.3`, `v1.2.3-rc.0`, `1.2.3` etc. Tightened to require a
-// numeric major to avoid catching arbitrary git tags.
+// Matches single-repo tags: `v1.2.3`, `v1.2.3-rc.0`, `1.2.3` etc. Tightened
+// to require a numeric major to avoid catching arbitrary git tags.
 const SEMVER_TAG_RE = /^v?\d+\.\d+\.\d+([+-][\w.]+)?$/;
 
+// Matches per-package monorepo tags Changesets-style: `@scope/name@1.2.3`
+// (scoped) or `name@1.2.3` (unscoped). Version half must be valid semver so
+// we don't accidentally pick up arbitrary `name@something` git tags.
+const PACKAGE_TAG_RE = /^(?:@[\w.-]+\/)?[\w.-]+@\d+\.\d+\.\d+([+-][\w.]+)?$/;
+
 /**
- * Newest semver-compliant tag in the repo, or `null` if none exist.
- * Sorts strictly by semver rather than by tag creation date — a back-port tag
- * `v1.0.1` created after `v2.0.0` is not "newer" for release purposes.
+ * Newest release tag in the repo, or `null` if none exist.
+ *
+ * Recognizes both:
+ *   - single-repo tags (`v1.2.3`, `1.2.3`)
+ *   - per-package monorepo tags (`@scope/name@1.2.3`, `name@1.2.3`)
+ *
+ * Sort strategy depends on what's present:
+ *   - **Only single-repo tags** → semver descending. A back-port tag `v1.0.1`
+ *     created after `v2.0.0` is NOT "newer" for release purposes.
+ *   - **Only per-package tags, or a mix** → commit date descending. Semver
+ *     comparison is meaningless across different package namespaces
+ *     (`@acme/api@2.0.0` and `@acme/ui@0.5.0` aren't ordered by version), and
+ *     the back-port concern doesn't generalize to per-package versioning
+ *     anyway — each package's history is independent.
+ *
+ * The mixed case matters in practice: a repo that started single-repo and
+ * later switched to monorepo (e.g. this one — `v1.0.0` lives alongside
+ * `@tagline-sh/bot@0.1.0`) must NOT pick the stale single-repo tag just
+ * because it sorts higher under semver. The per-package tags are the live
+ * release line; the legacy `v*` tag is history.
  */
 export async function getLastReleaseTag(
     reader: GitHubReader,
     repo: RepoRef,
 ): Promise<TagRef | null> {
     const tags = await reader.listTags(repo);
-    const semverTags = tags.filter((t) => SEMVER_TAG_RE.test(t.name));
-    if (semverTags.length === 0) return null;
+    const singleRepoTags = tags.filter((t) => SEMVER_TAG_RE.test(t.name));
+    const packageTags = tags.filter((t) => PACKAGE_TAG_RE.test(t.name));
+    const releaseTags = [...singleRepoTags, ...packageTags];
+    if (releaseTags.length === 0) return null;
 
-    semverTags.sort((a, b) => {
-        const av = semver.coerce(a.name)?.version ?? '0.0.0';
-        const bv = semver.coerce(b.name)?.version ?? '0.0.0';
-        return semver.rcompare(av, bv);
+    if (packageTags.length === 0) {
+        // Pure single-repo: semver sort (back-port safe).
+        singleRepoTags.sort((a, b) => {
+            const av = semver.coerce(a.name)?.version ?? '0.0.0';
+            const bv = semver.coerce(b.name)?.version ?? '0.0.0';
+            return semver.rcompare(av, bv);
+        });
+        return singleRepoTags[0] ?? null;
+    }
+
+    // Per-package tags present (with or without legacy v* tags): sort by
+    // commit date descending and pick the freshest. This matches "what
+    // happened most recently in this repo's release history" — the right
+    // anchor for "since X" PR filtering.
+    releaseTags.sort((a, b) => {
+        const at = Date.parse(a.commitDate);
+        const bt = Date.parse(b.commitDate);
+        if (Number.isNaN(at) && Number.isNaN(bt)) return 0;
+        if (Number.isNaN(at)) return 1;
+        if (Number.isNaN(bt)) return -1;
+        return bt - at;
     });
-    return semverTags[0] ?? null;
+    return releaseTags[0] ?? null;
 }
 
 interface MinimalPackageJson {
