@@ -340,7 +340,9 @@ export async function executeFinalizeRelease(
     }
 
     try {
-        core.info(`Step 1/3: Tagging merge commit ${input.mergeSha} with ${payload.tags.length} tag(s)`);
+        core.info(
+            `Step 1/3: Tagging merge commit ${input.mergeSha} with ${payload.tags.length} tag(s)`,
+        );
         const tagged = await tagMergeCommit(
             {
                 repoOwner: input.repoOwner,
@@ -350,7 +352,9 @@ export async function executeFinalizeRelease(
             },
             deps.octokit,
         );
-        core.info(`  created: [${tagged.created.join(', ')}] skipped: [${tagged.skipped.join(', ')}]`);
+        core.info(
+            `  created: [${tagged.created.join(', ')}] skipped: [${tagged.skipped.join(', ')}]`,
+        );
 
         core.info(`Step 2/3: Creating ${payload.tags.length} GitHub Release(s)`);
         // `releaseUrls` is always the same length as `payload.tags`. On the
