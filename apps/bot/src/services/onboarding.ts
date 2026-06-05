@@ -107,7 +107,7 @@ export function renderOnboardingPRBody(args: RenderOnboardingPRBodyArgs): string
     lines.push('- [ ] Add an `AI_API_KEY` repository secret (any OpenAI-compatible provider).');
     lines.push('- [ ] Merge this PR.');
     lines.push('');
-    lines.push('Questions? See the [docs](https://github.com/tagline-sh/tagline-sh).');
+    lines.push('Questions? See the [docs](https://github.com/HelicanHQ/tagline-sh).');
     return lines.join('\n');
 }
 
