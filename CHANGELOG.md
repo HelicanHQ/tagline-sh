@@ -5,6 +5,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [event-2026-06-05] - 2026-06-05
+
+Released:
+
+- `@tagline-sh/bot@0.3.1` — see [apps/bot/CHANGELOG.md](apps/bot/CHANGELOG.md)
+
 ## [event-2026-05-22] - 2026-05-22
 
 Released:
