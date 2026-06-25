@@ -2,7 +2,7 @@ import type { ParsedPR } from '@tagline-sh/shared';
 import type { Context, Probot } from 'probot';
 import { getPRsSinceLastTag, readRepoConfig } from '~/app/services';
 import { OctokitGitHubReader, type ReaderOctokit } from '~/app/services/octokit-reader';
-import type { GitHubReader, RepoRef } from '~/app/services/github-reader';
+import type { GitHubReader, PullRequestSummary, RepoRef } from '~/app/services/github-reader';
 import {
     createReleaseIssue,
     findOpenReleaseIssue,
@@ -37,6 +37,14 @@ export interface ManageReleaseIssueInput {
         merged: boolean;
         baseRef: string;
         headRef: string;
+        // Carried from the webhook payload so we can seed the just-merged PR
+        // directly instead of waiting for the Search API to index it. See
+        // `manageReleaseIssue` for why.
+        title: string;
+        url: string;
+        author: string;
+        mergedAt: string;
+        body: string | null;
     };
 }
 
@@ -54,10 +62,19 @@ export interface ManageReleaseIssueInput {
  *     closes the release issue itself in that case.
  *   - Base ref is not the configured production branch → skip
  *     ('non-production'); staging/dev are user-driven only.
- *   - `listMergedPRs` returns nothing (eventual-consistency lag) → skip
- *     ('no-prs'); next merge will repair.
  *   - Issue already exists → re-render and update.
  *   - Issue doesn't exist → create with the current pending-PR list.
+ *
+ * The pending-PR list is the union of (a) the PR that triggered this webhook,
+ * taken straight from the event payload, and (b) `getPRsSinceLastTag`, which
+ * queries the GitHub Search API. (b) lags a few seconds behind a fresh merge,
+ * so on the merge that *should* open the issue the just-merged PR is routinely
+ * missing from the search results — which previously produced a spurious
+ * 'no-prs' skip and no issue at all on low-traffic repos. Seeding the
+ * triggering PR from the payload makes a qualifying merge always open/refresh
+ * the issue; the search results backfill any earlier PRs since the last tag.
+ * ('no-prs' therefore can't occur for a qualifying merge anymore; the guard
+ * remains as defence in depth.)
  */
 export async function manageReleaseIssue(
     input: ManageReleaseIssueInput,
@@ -73,11 +90,31 @@ export async function manageReleaseIssue(
         return { kind: 'skipped', reason: 'non-production' };
     }
 
-    const { prs: summaries, lastTag } = await getPRsSinceLastTag(
+    const { prs: searchResults, lastTag } = await getPRsSinceLastTag(
         deps.reader,
         input.repo,
         config.branches.production,
     );
+
+    // Seed the triggering PR from the webhook payload. It has already passed
+    // the merged / non-release-branch / production-base guards above, so it
+    // belongs in the list — but the Search API behind `getPRsSinceLastTag` may
+    // not have indexed it yet. Union by number (search wins on dup, since it
+    // carries the canonical record), appending the payload PR if absent.
+    const triggeringPR: PullRequestSummary = {
+        number: input.pr.number,
+        title: input.pr.title,
+        body: input.pr.body,
+        url: input.pr.url,
+        author: input.pr.author,
+        mergedAt: input.pr.mergedAt,
+        baseRef: input.pr.baseRef,
+        headRef: input.pr.headRef,
+    };
+    const summaries = searchResults.some((p) => p.number === triggeringPR.number)
+        ? searchResults
+        : [...searchResults, triggeringPR];
+
     if (summaries.length === 0) {
         return { kind: 'skipped', reason: 'no-prs' };
     }
@@ -139,6 +176,11 @@ export async function handlePullRequestClosed(
                     merged: pr.merged,
                     baseRef: pr.base.ref,
                     headRef: pr.head.ref,
+                    title: pr.title,
+                    url: pr.html_url,
+                    author: pr.user?.login ?? 'unknown',
+                    mergedAt: pr.merged_at ?? '',
+                    body: pr.body ?? null,
                 },
             },
             {

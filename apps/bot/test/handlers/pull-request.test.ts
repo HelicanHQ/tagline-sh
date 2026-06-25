@@ -55,6 +55,11 @@ const BASE_INPUT = {
         merged: true,
         baseRef: 'main',
         headRef: 'feature/x',
+        title: 'feat: cool thing',
+        url: 'https://github.com/acme/widget/pull/42',
+        author: 'octocat',
+        mergedAt: '2026-05-20T10:00:00Z',
+        body: null,
     },
 };
 
@@ -96,15 +101,23 @@ describe('manageReleaseIssue — skip conditions', () => {
         expect(calls.listForRepo).not.toHaveBeenCalled();
     });
 
-    it('skips when listMergedPRs returns nothing (Search-API lag)', async () => {
-        // The webhook fired but the Search index has not caught up yet. The
-        // next merge will repair — we don't open a release issue with an
-        // empty body.
-        const reader = new FakeGitHubReader({ mergedPRs: [] });
-        const { octokit, calls } = fakeIssuesOctokit();
+    it('still opens the issue from the webhook payload when the Search API lags', async () => {
+        // Regression test: the webhook fired seconds after merge, so the Search
+        // index that backs listMergedPRs returns [] (the just-merged PR is not
+        // indexed yet). We must STILL open the issue, seeding the triggering PR
+        // straight from the event payload — otherwise low-traffic repos never
+        // get a release issue (there's no "next merge" to repair it).
+        const reader = new FakeGitHubReader({
+            tags: [{ name: 'v0.5.0', sha: 's', commitDate: '2026-05-01T00:00:00Z' }],
+            mergedPRs: [],
+        });
+        const { octokit, calls } = fakeIssuesOctokit({ listForRepoData: [] });
         const outcome = await manageReleaseIssue(BASE_INPUT, { reader, octokit });
-        expect(outcome).toEqual({ kind: 'skipped', reason: 'no-prs' });
-        expect(calls.create).not.toHaveBeenCalled();
+        expect(outcome.kind).toBe('created');
+        expect(calls.create).toHaveBeenCalledTimes(1);
+        // The triggering PR (#42, from the payload) is in the rendered body.
+        const createArgs = firstCallArg<{ body: string }>(calls.create);
+        expect(createArgs.body).toContain('#42');
     });
 });
 
