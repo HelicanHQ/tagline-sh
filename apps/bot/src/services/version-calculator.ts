@@ -86,15 +86,7 @@ function nextIncremental(currentVersion: string): string {
 
 // --- CalVer ------------------------------------------------------------------
 
-type CalverToken =
-    | 'YYYY'
-    | 'YY'
-    | '0Y'
-    | 'MM'
-    | '0M'
-    | 'DD'
-    | '0D'
-    | 'MICRO';
+type CalverToken = 'YYYY' | 'YY' | '0Y' | 'MM' | '0M' | 'DD' | '0D' | 'MICRO';
 
 type NonMicroToken = Exclude<CalverToken, 'MICRO'>;
 
@@ -205,19 +197,45 @@ function nextCalver(currentVersion: string, pattern: string, now: Date): string 
     const compiled = compileCalverPattern(pattern);
 
     const parsed = parseCalver(currentVersion, compiled);
-    if (!parsed) {
-        return renderCalver(compiled, now, 0);
-    }
+    const rendered = parsed
+        ? renderCalver(compiled, now, computeNextMicro(compiled, parsed, now))
+        : renderCalver(compiled, now, 0);
 
-    // Compare each non-MICRO token's value-now against its parsed value.
-    // Mismatch in any non-MICRO token resets MICRO to 0.
+    return assertNpmSafe(rendered, pattern);
+}
+
+/**
+ * MICRO increments when every non-MICRO token still matches the current
+ * calendar; any mismatch (a new month, year, …) resets it to 0.
+ */
+function computeNextMicro(compiled: CompiledPattern, parsed: ParsedCalver, now: Date): number {
     const allMatch = compiled.tokenOrder.every((name) => {
         if (name === 'MICRO') return true;
         return resolveToken(name, now, 0) === parsed.fixed[name as NonMicroToken];
     });
+    return allMatch ? (parsed.micro ?? 0) + 1 : 0;
+}
 
-    const nextMicro = allMatch ? (parsed.micro ?? 0) + 1 : 0;
-    return renderCalver(compiled, now, nextMicro);
+/**
+ * Hard guardrail: a calver version that lands in a `package.json#version` or a
+ * git tag MUST be valid SemVer, because npm rejects leading zeros (`2026.06.0`
+ * is not a publishable version). This throws the moment a pattern produces one
+ * — typically a `0M`/`0D` token on a single-digit month/day — instead of
+ * silently shipping a version that breaks at `npm publish`.
+ *
+ * Note the failure is calendar-dependent by design: `0M` yields valid output in
+ * October (`2026.10.0`) but throws in June (`2026.06.0`). That's exactly the
+ * boundary we want — it throws iff it would emit a zero-padded number. The
+ * remedy is always the same: switch the offending `0X` token to its unpadded
+ * form (`MM`/`DD`/`YY`).
+ */
+function assertNpmSafe(version: string, pattern: string): string {
+    if (semver.valid(version)) return version;
+    throw new Error(
+        `CalVer pattern '${pattern}' produced '${version}', which is not a valid npm/SemVer ` +
+            `version (npm forbids leading zeros, e.g. '06'). Use unpadded tokens — 'MM' instead ` +
+            `of '0M', 'DD' instead of '0D' — in your .release-agent.md 'pattern'.`,
+    );
 }
 
 // --- Pre-release suffix (shared across schemes) ------------------------------

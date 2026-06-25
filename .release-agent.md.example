@@ -30,10 +30,13 @@
 #   - incremental  — trailing integer +1 per release.
 #
 # Calver tokens: YYYY, YY, 0Y, MM, 0M, DD, 0D, MICRO. MICRO is required.
+# Use UNPADDED tokens (MM, DD) — npm forbids leading zeros, so a zero-padded
+# token like 0M produces an invalid version (2026.06.0) that npm rejects.
+# Tagline fails the release with a clear error if a pattern would emit one.
 
 - scheme: semver
 # - scheme: calver
-# - pattern: YYYY.0M.MICRO
+# - pattern: YYYY.MM.MICRO
 
 ## Release Notes Style
 

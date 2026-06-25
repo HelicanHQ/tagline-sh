@@ -51,14 +51,21 @@ export const BUMP_PRIORITY: Record<BumpType, number> = {
 
 /**
  * Default calver pattern when the user opts into calver without specifying a
- * pattern. `YYYY.0M.MICRO` matches the most common npm CalVer convention.
+ * pattern. `YYYY.MM.MICRO` is the only npm-safe shape: months are rendered
+ * UNPADDED (`2026.6.0`, not `2026.06.0`).
+ *
+ * Why not the zero-padded `YYYY.0M.MICRO`: SemVer — and therefore npm — forbids
+ * leading zeros in the numeric MAJOR/MINOR/PATCH identifiers, so `2026.06.0`
+ * is an *invalid* version that `npm publish` rejects. The `0M`/`0D` tokens are
+ * still recognised by the parser for non-npm tagging workflows, but they make
+ * `calculateNextVersion` throw the moment they would emit a leading zero.
  *
  * Intentionally a pure literal — `@tagline-sh/shared` is consumed by both bot
  * and action, and the action runs inside the user's CI runner where the bot's
  * env vars don't exist. Per-deployment overrides happen at the bot side via
  * `.release-agent.md` config, not via env vars in this shared package.
  */
-export const DEFAULT_CALVER_PATTERN = 'YYYY.0M.MICRO';
+export const DEFAULT_CALVER_PATTERN = 'YYYY.MM.MICRO';
 
 export const DEFAULT_VERSIONING: VersioningConfig = {
     scheme: 'semver',

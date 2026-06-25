@@ -209,15 +209,43 @@ describe('reportComment', () => {
         expect(md).not.toContain('/approve patch');
     });
 
+    it('renders (calver) in the Bump column for a non-semver monorepo (not a bump word)', () => {
+        const calverMonorepo: ReleaseReport = {
+            ...sampleReport,
+            isMonorepo: true,
+            versioningScheme: 'calver',
+            packages: [
+                {
+                    name: '@acme/api',
+                    path: 'packages/api',
+                    packageJsonPath: 'packages/api/package.json',
+                    changelogPath: 'packages/api/CHANGELOG.md',
+                    currentVersion: '2026.5.0',
+                    nextVersion: '2026.5.1',
+                    // Advisory aggregate — must NOT surface as the Bump cell for calver.
+                    bumpType: 'minor',
+                    prs: [sampleReport.prs[0]!],
+                    changelogContent: '## [2026.5.1]\n',
+                    tagName: '@acme/api@2026.5.1',
+                },
+            ],
+        };
+        const md = reportComment(calverMonorepo);
+        expect(md).toContain('`2026.5.0 → 2026.5.1`');
+        // Bump cell shows the scheme, matching docs/monorepo.md — never `minor`.
+        expect(md).toContain('| (calver) |');
+        expect(md).not.toContain('| `minor` |');
+    });
+
     it('renders calver recommendation without bump wording', () => {
         const calverReport: ReleaseReport = {
             ...sampleReport,
             versioningScheme: 'calver',
-            suggestedVersion: '2026.05.1',
+            suggestedVersion: '2026.5.1',
             suggestedBump: 'minor', // advisory only — should not appear in the comment.
         };
         const md = reportComment(calverReport);
-        expect(md).toContain('**Next version:** `v2026.05.1`');
+        expect(md).toContain('**Next version:** `v2026.5.1`');
         expect(md).toContain('_(scheme: calver)_');
         expect(md).not.toContain('Suggested bump:');
         // Footer should advertise `as <version>`, not bump words.

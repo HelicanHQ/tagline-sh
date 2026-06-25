@@ -134,8 +134,16 @@ export function reportComment(report: ReleaseReport): string {
         lines.push('|---|---|---|---|');
         for (const pkg of report.packages) {
             const prRefs = pkg.prs.map((p) => `#${p.number}`).join(', ') || '—';
+            // The Bump column only carries meaning for semver. For calver /
+            // incremental the version is mechanical, so we show the scheme name
+            // instead of a `bumpType` category that doesn't apply (matches the
+            // worked example in docs/monorepo.md).
+            const bumpCell =
+                report.versioningScheme === 'semver'
+                    ? `\`${pkg.bumpType}\``
+                    : `(${report.versioningScheme})`;
             lines.push(
-                `| \`${pkg.name}\` | \`${pkg.currentVersion} → ${pkg.nextVersion}\` | \`${pkg.bumpType}\` | ${prRefs} |`,
+                `| \`${pkg.name}\` | \`${pkg.currentVersion} → ${pkg.nextVersion}\` | ${bumpCell} | ${prRefs} |`,
             );
         }
         lines.push('');
@@ -153,7 +161,9 @@ export function reportComment(report: ReleaseReport): string {
 
     lines.push('');
     lines.push('<details>');
-    lines.push('<summary>New changelog entry — will be prepended to <code>CHANGELOG.md</code> on release</summary>');
+    lines.push(
+        '<summary>New changelog entry — will be prepended to <code>CHANGELOG.md</code> on release</summary>',
+    );
     lines.push('');
     lines.push('```markdown');
     lines.push(report.changelogPreview.trimEnd());
@@ -319,4 +329,3 @@ export function errorComment(action: string, detail?: string): string {
     }
     return `${base} Please try again, or check the bot logs.`;
 }
-
