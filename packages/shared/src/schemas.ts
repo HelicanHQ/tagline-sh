@@ -23,6 +23,30 @@ export const CommitTypeSchema = z.enum([
 
 export const BumpTypeSchema = z.enum(['major', 'minor', 'patch', 'none']);
 
+/**
+ * Reject a version whose release core contains a zero-padded numeric component
+ * (e.g. the `06` in `2026.06.0`). npm/SemVer forbid leading zeros, so such a
+ * version breaks at `npm publish` — this is the trust-boundary backstop for the
+ * calver `0M`/`0D` foot-gun, in case a stale bot build slips one through.
+ *
+ * Deliberately NOT a full `semver.valid()` check: the `incremental` scheme
+ * legitimately produces bare integers (`7`), which aren't SemVer but are a
+ * supported, npm-publishable shape. `ReleasePlan` carries no scheme field, so
+ * we can't branch on it here — a targeted leading-zero test catches the real
+ * defect without rejecting incremental versions, and needs no `semver` dep.
+ */
+function hasLeadingZeroComponent(version: string): boolean {
+    const core = version.replace(/^v/, '').split(/[-+]/, 1)[0] ?? '';
+    return core.split('.').some((part) => /^0\d/.test(part));
+}
+
+const npmSafeVersion = (schema: z.ZodString) =>
+    schema.refine((v) => !hasLeadingZeroComponent(v), {
+        message:
+            "version has a zero-padded component (npm forbids leading zeros, e.g. '06' in " +
+            "'2026.06.0'); use an unpadded calver pattern such as 'YYYY.MM.MICRO'",
+    });
+
 export const MonorepoTypeSchema = z.enum([
     'pnpm-workspaces',
     'npm-workspaces',
@@ -120,7 +144,7 @@ export const PackageReleasePlanSchema = z.object({
     packageJsonPath: z.string().min(1),
     changelogPath: z.string().min(1),
     currentVersion: z.string().min(1),
-    nextVersion: z.string().min(1),
+    nextVersion: npmSafeVersion(z.string().min(1)),
     bumpType: BumpTypeSchema,
     // `prs` is OPTIONAL in transport. The bot strips it out before
     // workflow_dispatch (it's already baked into `changelogContent`). The
@@ -137,7 +161,7 @@ export const ReleasePlanSchema = z.object({
     baseBranch: z.string().min(1),
     bumpType: BumpTypeSchema,
     currentVersion: z.string().min(1),
-    nextVersion: z.string().min(1),
+    nextVersion: npmSafeVersion(z.string().min(1)),
     lastTag: z.string().nullable(),
     // OPTIONAL in transport — see PackageReleasePlanSchema.prs above. The bot
     // sends `[]` over the wire to stay under GitHub's `workflow_dispatch`

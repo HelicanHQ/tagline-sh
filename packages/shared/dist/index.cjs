@@ -95,7 +95,7 @@ var BUMP_PRIORITY = {
   minor: 2,
   major: 3
 };
-var DEFAULT_CALVER_PATTERN = "YYYY.0M.MICRO";
+var DEFAULT_CALVER_PATTERN = "YYYY.MM.MICRO";
 var DEFAULT_VERSIONING = {
   scheme: "semver",
   pattern: null
@@ -221,6 +221,13 @@ var CommitTypeSchema = import_zod.z.enum([
   "release"
 ]);
 var BumpTypeSchema = import_zod.z.enum(["major", "minor", "patch", "none"]);
+function hasLeadingZeroComponent(version) {
+  const core = version.replace(/^v/, "").split(/[-+]/, 1)[0] ?? "";
+  return core.split(".").some((part) => /^0\d/.test(part));
+}
+var npmSafeVersion = (schema) => schema.refine((v) => !hasLeadingZeroComponent(v), {
+  message: "version has a zero-padded component (npm forbids leading zeros, e.g. '06' in '2026.06.0'); use an unpadded calver pattern such as 'YYYY.MM.MICRO'"
+});
 var MonorepoTypeSchema = import_zod.z.enum([
   "pnpm-workspaces",
   "npm-workspaces",
@@ -296,7 +303,7 @@ var PackageReleasePlanSchema = import_zod.z.object({
   packageJsonPath: import_zod.z.string().min(1),
   changelogPath: import_zod.z.string().min(1),
   currentVersion: import_zod.z.string().min(1),
-  nextVersion: import_zod.z.string().min(1),
+  nextVersion: npmSafeVersion(import_zod.z.string().min(1)),
   bumpType: BumpTypeSchema,
   // `prs` is OPTIONAL in transport. The bot strips it out before
   // workflow_dispatch (it's already baked into `changelogContent`). The
@@ -312,7 +319,7 @@ var ReleasePlanSchema = import_zod.z.object({
   baseBranch: import_zod.z.string().min(1),
   bumpType: BumpTypeSchema,
   currentVersion: import_zod.z.string().min(1),
-  nextVersion: import_zod.z.string().min(1),
+  nextVersion: npmSafeVersion(import_zod.z.string().min(1)),
   lastTag: import_zod.z.string().nullable(),
   // OPTIONAL in transport — see PackageReleasePlanSchema.prs above. The bot
   // sends `[]` over the wire to stay under GitHub's `workflow_dispatch`

@@ -58,13 +58,15 @@ Declares which versioning scheme your repo uses. **Default is `semver`**, omit t
 ## Versioning
 
 - scheme: calver
-- pattern: YYYY.0M.MICRO
+- pattern: YYYY.MM.MICRO
 ```
 
 | Key       | Default                                 | Allowed values                                           |
 | --------- | --------------------------------------- | -------------------------------------------------------- |
 | `scheme`  | `semver`                                | `semver`, `calver`, `incremental`                        |
-| `pattern` | `YYYY.0M.MICRO` (when `scheme: calver`) | any combination of the tokens below + literal separators |
+| `pattern` | `YYYY.MM.MICRO` (when `scheme: calver`) | any combination of the tokens below + literal separators |
+
+> ⚠️ **Use unpadded tokens (`MM`, `DD`) — npm rejects leading zeros.** SemVer (and therefore npm) forbids a leading zero in any numeric component, so a zero-padded token like `0M` produces an **invalid** version (`2026.06.0`) that `npm publish` refuses. Tagline now **fails the release with a clear error** the moment a pattern would emit one, rather than shipping a broken version. The padded `0X` tokens remain only for non-npm, tag-only workflows.
 
 #### Calver tokens
 
@@ -72,14 +74,14 @@ Declares which versioning scheme your repo uses. **Default is `semver`**, omit t
 | ------- | ---------------------------------------------------------------------------- | --------------------- |
 | `YYYY`  | 4-digit year                                                                 | `2026`                |
 | `YY`    | year mod 100, no padding                                                     | `26`                  |
-| `0Y`    | year mod 100, zero-padded to 2 digits                                        | `26`                  |
-| `MM`    | month, no padding                                                            | `5`                   |
-| `0M`    | month, zero-padded                                                           | `05`                  |
-| `DD`    | day of month, no padding                                                     | `19`                  |
-| `0D`    | day of month, zero-padded                                                    | `19`                  |
+| `0Y`    | year mod 100, zero-padded to 2 digits ⚠️ npm-invalid for years < 2010        | `26`                  |
+| `MM`    | month, no padding ✅ npm-safe                                                 | `5`                   |
+| `0M`    | month, zero-padded ⚠️ npm-invalid in single-digit months (Jan–Sep)          | `05`                  |
+| `DD`    | day of month, no padding ✅ npm-safe                                          | `19`                  |
+| `0D`    | day of month, zero-padded ⚠️ npm-invalid on single-digit days               | `19`                  |
 | `MICRO` | counter that resets when any other token changes value, increments otherwise | `0`, `1`, `2`, …      |
 
-The pattern **must include `MICRO`** so two releases on the same date can be distinguished. Anything that isn't a token is treated as a literal — `YYYY.0M.MICRO`, `YYYY-MM-DD-MICRO`, and `vYYYY_0M_MICRO` all work.
+The pattern **must include `MICRO`** so two releases on the same date can be distinguished. Anything that isn't a token is treated as a literal — `YYYY.MM.MICRO`, `YYYY-MM-DD-MICRO`, and `vYYYY_MM_MICRO` all work.
 
 Time tokens are evaluated in **UTC** so bot and action agree on the calendar regardless of where they run.
 

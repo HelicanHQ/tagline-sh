@@ -76,6 +76,48 @@ describe('ReleasePlanSchema', () => {
         expect(() => parseReleasePlan('{not json')).toThrow();
     });
 
+    it('rejects a zero-padded nextVersion (npm forbids leading zeros)', () => {
+        const bad = { ...goodPlan, nextVersion: '2026.06.0' };
+        expect(() => ReleasePlanSchema.parse(bad)).toThrow(/leading zeros|zero-padded/);
+    });
+
+    it('rejects a zero-padded nextVersion on a package plan', () => {
+        const bad = {
+            ...goodPlan,
+            isMonorepo: true,
+            packages: [
+                {
+                    name: '@acme/api',
+                    path: 'packages/api',
+                    packageJsonPath: 'packages/api/package.json',
+                    changelogPath: 'packages/api/CHANGELOG.md',
+                    currentVersion: '2026.6.0',
+                    nextVersion: '2026.06.1',
+                    bumpType: 'minor' as const,
+                    changelogContent: '## [2026.06.1]\n',
+                    tagName: '@acme/api@2026.06.1',
+                },
+            ],
+        };
+        expect(() => ReleasePlanSchema.parse(bad)).toThrow(/leading zeros|zero-padded/);
+    });
+
+    it('accepts an unpadded calver nextVersion', () => {
+        expect(() =>
+            ReleasePlanSchema.parse({ ...goodPlan, nextVersion: '2026.6.0' }),
+        ).not.toThrow();
+    });
+
+    it('accepts a bare incremental nextVersion (not semver, but npm-publishable)', () => {
+        expect(() => ReleasePlanSchema.parse({ ...goodPlan, nextVersion: '42' })).not.toThrow();
+    });
+
+    it('accepts a calver prerelease nextVersion', () => {
+        expect(() =>
+            ReleasePlanSchema.parse({ ...goodPlan, nextVersion: '2026.6.1-rc.0' }),
+        ).not.toThrow();
+    });
+
     it('rejects a non-string url in a PR', () => {
         const bad = {
             ...goodPlan,
@@ -94,11 +136,7 @@ describe('ReleasePlanSchema', () => {
         // to fit under GitHub's workflow_dispatch input size limit. The
         // schema must accept that shape and fill the defaults so the action
         // sees identical structure either way.
-        const {
-            prs: _droppedPRs,
-            monorepoInfo: _droppedMRI,
-            ...slim
-        } = goodPlan;
+        const { prs: _droppedPRs, monorepoInfo: _droppedMRI, ...slim } = goodPlan;
         const parsed = ReleasePlanSchema.parse(slim);
         expect(parsed.prs).toEqual([]);
         expect(parsed.monorepoInfo).toBeNull();
