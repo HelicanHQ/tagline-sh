@@ -3,7 +3,9 @@ import {
     aggregatePRBumps,
     attributePRsToPackages,
     buildPackagePlans,
-    calculateNextVersion,
+    channelForBranch,
+    computeChannelVersion,
+    deriveLineVersions,
     detectMonorepo,
     deterministicReport,
     generateReport,
@@ -14,6 +16,7 @@ import {
     OctokitGitHubReader,
     type ReaderOctokit,
     readRepoConfig,
+    stableChannel,
 } from '~/app/services';
 
 export interface ReleaseReportInput {
@@ -46,10 +49,17 @@ export async function buildReleaseReport(input: ReleaseReportInput): Promise<Rel
     const config = await readRepoConfig(reader, repoRef);
     const branch = input.branch ?? config.branches.production;
 
-    const [monorepo, currentVersion, { prs: summaries, lastTag }] = await Promise.all([
+    // Resolve the release channel for this branch. An unknown branch (e.g. a
+    // `--branch` pointed at something not configured) falls back to the stable
+    // channel so the report still renders a clean version.
+    const channel = channelForBranch(config, branch) ??
+        stableChannel(config) ?? { branch, tier: 'stable' as const, suffix: null };
+
+    const [monorepo, currentVersion, { prs: summaries, lastTag }, tags] = await Promise.all([
         detectMonorepo(reader, repoRef, branch),
         getCurrentVersion(reader, repoRef, branch),
         getPRsSinceLastTag(reader, repoRef, branch),
+        reader.listTags(repoRef),
     ]);
 
     const hydrated = await hydratePRs(reader, repoRef, summaries);
@@ -74,13 +84,19 @@ export async function buildReleaseReport(input: ReleaseReportInput): Promise<Rel
     let packages: PackageReleasePlan[] = [];
     let suggestedVersion: string;
     if (monorepoInfo) {
-        packages = buildPackagePlans({ monorepoInfo, branch, config });
+        packages = buildPackagePlans({ monorepoInfo, branch, config, channel, tags });
         suggestedVersion = packages.length > 0 ? monorepoEventId() : currentVersion;
     } else {
-        suggestedVersion =
-            suggestedBump === 'none'
-                ? currentVersion
-                : calculateNextVersion(currentVersion, suggestedBump, branch, config);
+        const { lastStableVersion, knownVersions } = deriveLineVersions(tags);
+        suggestedVersion = computeChannelVersion({
+            channel,
+            lastStableVersion,
+            currentVersion,
+            bump: suggestedBump,
+            scheme: config.versioning.scheme,
+            pattern: config.versioning.pattern,
+            knownVersions,
+        });
     }
 
     let aiOutput;

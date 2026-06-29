@@ -1,4 +1,4 @@
-import type { ParsedPR } from '@tagline-sh/shared';
+import type { ParsedPR, ReleaseChannel } from '@tagline-sh/shared';
 import {
     RELEASE_ISSUE_LABEL,
     RELEASE_ISSUE_LABEL_COLOR,
@@ -123,6 +123,12 @@ export interface RenderReleaseIssueArgs {
     branch: string;
     lastTag: string | null;
     prs: ParsedPR[];
+    /**
+     * The release channel this issue tracks. Drives the channel tag in the
+     * title (e.g. "(alpha)") so concurrent per-channel issues are visually
+     * distinct. Optional for back-compat; absent → no tag (stable-style).
+     */
+    channel?: ReleaseChannel;
 }
 
 /** Strip the leading `type(scope?)!:` from a PR title for human-readable display. */
@@ -131,10 +137,20 @@ function humanizeTitle(title: string): string {
     return title.trim().replace(CC_PREFIX_RE, '').trim() || title.trim();
 }
 
-export function renderReleaseIssueTitle(args: { lastTag: string | null; prCount: number }): string {
+export function renderReleaseIssueTitle(args: {
+    lastTag: string | null;
+    prCount: number;
+    channel?: ReleaseChannel;
+}): string {
     const sinceClause = args.lastTag ? `since ${args.lastTag}` : 'since the first release';
     const noun = args.prCount === 1 ? 'change' : 'changes';
-    return `🚀 Release pending — ${args.prCount} ${noun} ${sinceClause}`;
+    // Pre-release channels get a tag so an "alpha" issue and an "rc" issue are
+    // distinguishable at a glance when several run concurrently.
+    const channelTag =
+        args.channel && args.channel.tier === 'prerelease' && args.channel.suffix
+            ? ` (${args.channel.suffix})`
+            : '';
+    return `🚀 Release pending${channelTag} — ${args.prCount} ${noun} ${sinceClause}`;
 }
 
 export function renderReleaseIssueBody(args: RenderReleaseIssueArgs): string {
@@ -200,6 +216,7 @@ export function renderReleaseIssueBody(args: RenderReleaseIssueArgs): string {
 export async function findOpenReleaseIssue(
     octokit: ReleaseIssueOctokit,
     repo: RepoRef,
+    branch?: string,
 ): Promise<ReleaseIssue | null> {
     const res = await octokit.rest.issues.listForRepo({
         owner: repo.owner,
@@ -214,6 +231,9 @@ export async function findOpenReleaseIssue(
         if (issue.pull_request) continue;
         const marker = extractMarker(issue.body);
         if (!marker) continue;
+        // Per-channel scoping: when a branch is given, only match the issue that
+        // tracks THAT channel (each channel branch has its own tracking issue).
+        if (branch !== undefined && marker.branch !== branch) continue;
         return {
             number: issue.number,
             title: issue.title,
@@ -268,7 +288,11 @@ export async function createReleaseIssue(
     args: CreateReleaseIssueArgs,
 ): Promise<{ number: number; html_url: string }> {
     await ensureReleaseLabel(octokit, repo);
-    const title = renderReleaseIssueTitle({ lastTag: args.lastTag, prCount: args.prs.length });
+    const title = renderReleaseIssueTitle({
+        lastTag: args.lastTag,
+        prCount: args.prs.length,
+        channel: args.channel,
+    });
     const body = renderReleaseIssueBody(args);
     const res = await octokit.rest.issues.create({
         owner: repo.owner,
@@ -295,7 +319,11 @@ export async function updateReleaseIssue(
     repo: RepoRef,
     args: UpdateReleaseIssueArgs,
 ): Promise<void> {
-    const title = renderReleaseIssueTitle({ lastTag: args.lastTag, prCount: args.prs.length });
+    const title = renderReleaseIssueTitle({
+        lastTag: args.lastTag,
+        prCount: args.prs.length,
+        channel: args.channel,
+    });
     const body = renderReleaseIssueBody(args);
     await octokit.rest.issues.update({
         owner: repo.owner,

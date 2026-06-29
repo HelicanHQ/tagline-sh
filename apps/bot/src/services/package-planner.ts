@@ -4,15 +4,30 @@ import {
     type BumpType,
     type MonorepoInfo,
     type PackageReleasePlan,
+    type ReleaseChannel,
     type RepoConfig,
 } from '@tagline-sh/shared';
-import { calculateNextVersion } from '~/app/services/version-calculator';
+import { computeChannelVersion } from '~/app/services/version-calculator';
+import { deriveLineVersions } from '~/app/services/pr-reader';
+import type { TagRef } from '~/app/services/github-reader';
 import { renderChangelogEntry } from '~/app/services/changelog-writer';
 
 export interface BuildPackagePlansInput {
     monorepoInfo: MonorepoInfo;
     branch: string;
     config: RepoConfig;
+    /**
+     * The release channel for `branch` (stable/alpha/rc). Drives the version
+     * suffix per package. Defaults to a synthetic stable channel on `branch`
+     * when omitted, so callers that haven't been updated keep clean versions.
+     */
+    channel?: ReleaseChannel;
+    /**
+     * All repo tags, used to derive each package's last-stable anchor and its
+     * pre-release counter (`deriveLineVersions(tags, pkg.name)`). Empty array is
+     * safe — packages fall back to their `currentVersion` as the anchor.
+     */
+    tags?: TagRef[];
     /**
      * Optional per-package bump overrides keyed by package name (e.g.
      * `{ '@acme/api': 'minor', '@acme/ui': 'patch' }`). When present, replaces
@@ -46,6 +61,8 @@ export interface BuildPackagePlansInput {
 export function buildPackagePlans(input: BuildPackagePlansInput): PackageReleasePlan[] {
     const { monorepoInfo, branch, config, bumpOverrides, now } = input;
     const scheme = config.versioning.scheme;
+    const tags = input.tags ?? [];
+    const channel: ReleaseChannel = input.channel ?? { branch, tier: 'stable', suffix: null };
     const plans: PackageReleasePlan[] = [];
 
     for (const pkg of monorepoInfo.packages) {
@@ -60,7 +77,17 @@ export function buildPackagePlans(input: BuildPackagePlansInput): PackageRelease
         // bump category).
         if (scheme === 'semver' && bumpType === 'none' && !override) continue;
 
-        const nextVersion = calculateNextVersion(pkg.currentVersion, bumpType, branch, config, now);
+        const { lastStableVersion, knownVersions } = deriveLineVersions(tags, pkg.name);
+        const nextVersion = computeChannelVersion({
+            channel,
+            lastStableVersion,
+            currentVersion: pkg.currentVersion,
+            bump: bumpType,
+            scheme,
+            pattern: config.versioning.pattern,
+            knownVersions,
+            now,
+        });
 
         // Per-package CHANGELOG entry — built deterministically from the
         // package's own attributed PRs so each package's history is internally

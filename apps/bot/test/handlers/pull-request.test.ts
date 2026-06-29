@@ -7,15 +7,17 @@ import {
     type ReleaseIssueOctokit,
 } from '../../src/services/release-issue.js';
 
-function fakeIssuesOctokit(opts: {
-    listForRepoData?: Array<{
-        number: number;
-        title: string;
-        body: string | null;
-        state: string;
-        pull_request?: unknown;
-    }>;
-} = {}) {
+function fakeIssuesOctokit(
+    opts: {
+        listForRepoData?: Array<{
+            number: number;
+            title: string;
+            body: string | null;
+            state: string;
+            pull_request?: unknown;
+        }>;
+    } = {},
+) {
     const calls = {
         listForRepo: vi.fn(async () => ({ data: opts.listForRepoData ?? [] })),
         create: vi.fn(async () => ({ data: { number: 999, html_url: 'created-url' } })),
@@ -90,15 +92,54 @@ describe('manageReleaseIssue — skip conditions', () => {
         expect(calls.listForRepo).not.toHaveBeenCalled();
     });
 
-    it('skips when PR base is not the production branch (staging/dev merges)', async () => {
+    it('skips when PR base is not a configured channel branch', async () => {
         const reader = new FakeGitHubReader({});
         const { octokit, calls } = fakeIssuesOctokit();
+        const outcome = await manageReleaseIssue(
+            { ...BASE_INPUT, pr: { ...BASE_INPUT.pr, baseRef: 'some-feature-branch' } },
+            { reader, octokit },
+        );
+        expect(outcome).toEqual({ kind: 'skipped', reason: 'non-channel' });
+        expect(calls.listForRepo).not.toHaveBeenCalled();
+    });
+
+    it('opens a per-channel issue tagged (rc) when merging into the staging channel', async () => {
+        // Default config maps staging → rc. A merge into staging now creates its
+        // OWN tracking issue (distinct from the stable/main one), tagged "(rc)".
+        const reader = new FakeGitHubReader({ mergedPRs: [] });
+        const { octokit, calls } = fakeIssuesOctokit({ listForRepoData: [] });
         const outcome = await manageReleaseIssue(
             { ...BASE_INPUT, pr: { ...BASE_INPUT.pr, baseRef: 'staging' } },
             { reader, octokit },
         );
-        expect(outcome).toEqual({ kind: 'skipped', reason: 'non-production' });
-        expect(calls.listForRepo).not.toHaveBeenCalled();
+        expect(outcome.kind).toBe('created');
+        const createArgs = firstCallArg<{ title: string; body: string }>(calls.create);
+        expect(createArgs.title).toContain('(rc)');
+        // The marker records the channel branch so the issue is found per-channel.
+        expect(createArgs.body).toContain('"branch":"staging"');
+    });
+
+    it('finds the matching channel issue and ignores other channels’ issues', async () => {
+        // An open issue exists, but for the alpha (development) channel. A merge
+        // into staging must NOT update it — it should open a separate rc issue.
+        const alphaMarker = encodeMarker({ v: 1, branch: 'development', lastTag: null });
+        const reader = new FakeGitHubReader({ mergedPRs: [] });
+        const { octokit, calls } = fakeIssuesOctokit({
+            listForRepoData: [
+                {
+                    number: 50,
+                    title: '🚀 Release pending (alpha) — 1 change since the first release',
+                    body: `alpha issue ${alphaMarker}`,
+                    state: 'open',
+                },
+            ],
+        });
+        const outcome = await manageReleaseIssue(
+            { ...BASE_INPUT, pr: { ...BASE_INPUT.pr, baseRef: 'staging' } },
+            { reader, octokit },
+        );
+        expect(outcome.kind).toBe('created');
+        expect(calls.update).not.toHaveBeenCalled();
     });
 
     it('still opens the issue from the webhook payload when the Search API lags', async () => {

@@ -31,24 +31,53 @@ The `packages/ui` package has its own release cycle.
 
 ## Sections Tagline parses
 
-Two section headings have deterministic parsers; everything else is treated as free-form context for the AI prompt.
+These section headings have deterministic parsers; everything else is treated as free-form context for the AI prompt.
 
-### `## Branches`
+### `## Channels` (recommended)
 
-A bulleted list of `- key: value` pairs. Recognized keys:
+A release **channel** maps one branch to a stability tier. Tagline watches every channel branch: a PR merged into a channel branch opens that channel's own release-tracking issue, and the version it ships carries the channel's pre-release suffix.
+
+```markdown
+## Channels
+
+- main: stable
+- staging: rc
+- develop: alpha
+```
+
+Each line is `- <branch>: <tier>`. `stable` produces clean versions (`0.2.0`); any other value is a **pre-release** channel whose label becomes the suffix — so `rc` → `0.2.0-rc.N`, `alpha` → `0.2.0-alpha.N`, and you can add your own (`beta`, `canary`, …). Branch names are case-sensitive; tiers are not.
+
+**How versions flow (dev → staging → prod):** the base is anchored to the last **stable** release and stays fixed as you promote; only the suffix and counter change. The counter is derived from existing tags, so it resets automatically when the base bumps or you switch channels:
+
+```
+last stable 0.1.1, a feat lands →
+  merge → develop   0.2.0-alpha.0 → 0.2.0-alpha.1   (counter climbs)
+  promote → staging 0.2.0-rc.0    → 0.2.0-rc.1       (same base, counter resets)
+  promote → main    0.2.0                            (stable, suffix dropped)
+```
+
+> Pre-release suffixes use unpadded numeric counters (`alpha.0`, `alpha.1`) so every channel version is valid npm/SemVer.
+
+### `## Branches` + `## Pre-release Tags` (legacy shorthand)
+
+If you don't declare `## Channels`, Tagline derives channels from these older sections — `production` → stable, `staging` → its suffix, `development` → its suffix. Existing repos keep working unchanged.
+
+`## Branches` — a bulleted list of `- key: value` pairs:
 
 | Key           | Default   | What it does                                                      |
 | ------------- | --------- | ----------------------------------------------------------------- |
-| `production`  | `main`    | The branch reports run against by default.                        |
+| `production`  | `main`    | The stable channel; the branch reports run against by default.    |
 | `staging`     | `staging` | Pre-release branch for `-rc.N` tags. Set to `none` to disable.    |
 | `development` | `develop` | Pre-release branch for `-alpha.N` tags. Set to `none` to disable. |
 
-### `## Pre-release Tags`
+`## Pre-release Tags`:
 
 | Key                  | Default | What it does                                           |
 | -------------------- | ------- | ------------------------------------------------------ |
 | `staging suffix`     | `rc`    | Suffix used on the staging branch (e.g. `1.5.0-rc.0`). |
 | `development suffix` | `alpha` | Suffix used on the dev branch (e.g. `1.5.0-alpha.0`).  |
+
+> **Workflow note:** for Phase B (finalize) to tag pre-release releases, list every channel branch under `push.branches` in `.github/workflows/release-agent.yml` (e.g. `[main, staging, develop]`).
 
 ### `## Versioning`
 

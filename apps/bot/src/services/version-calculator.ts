@@ -273,6 +273,15 @@ export interface ChannelVersionInput {
      * and promotion never re-bumps.
      */
     lastStableVersion: string | null;
+    /**
+     * The branch's current version (e.g. `package.json#version`), used only as
+     * the base anchor when `lastStableVersion` is null — i.e. a line that has no
+     * stable release yet. A stable `currentVersion` seeds a first release (it is
+     * bumped); a pre-release `currentVersion` means we're mid pre-release cycle,
+     * so its core is kept as the base (don't re-bump). Ignored once a stable tag
+     * exists.
+     */
+    currentVersion?: string | null;
     /** Aggregated bump since the last stable. Only used by the `semver` scheme. */
     bump: BumpType;
     scheme: VersioningScheme;
@@ -305,7 +314,14 @@ export function computeChannelVersion(input: ChannelVersionInput): string {
     const now = input.now ?? new Date();
     const pattern = input.pattern ?? null;
 
-    const base = computeBase(scheme, lastStableVersion, bump, pattern, now);
+    const base = computeBase(
+        scheme,
+        lastStableVersion,
+        input.currentVersion ?? null,
+        bump,
+        pattern,
+        now,
+    );
 
     if (channel.tier === 'stable') return base;
 
@@ -328,24 +344,43 @@ function stripToCore(version: string): string {
 function computeBase(
     scheme: VersioningScheme,
     lastStableVersion: string | null,
+    currentVersion: string | null,
     bump: BumpType,
     pattern: string | null,
     now: Date,
 ): string {
     const stable = lastStableVersion ? stripToCore(lastStableVersion) : null;
+    const current = currentVersion
+        ? currentVersion.startsWith('v')
+            ? currentVersion.slice(1)
+            : currentVersion
+        : null;
 
     if (scheme === 'semver') {
-        if (!stable) return FIRST_RELEASE_VERSION;
-        if (bump === 'none') return stable;
-        return nextSemver(stable, bump);
+        if (stable) {
+            return bump === 'none' ? stable : nextSemver(stable, bump);
+        }
+        // No stable release yet — fall back to the current version as anchor.
+        if (current) {
+            // A pre-release current version means we're mid-cycle for that base;
+            // keep the base (the counter will advance). A stable current version
+            // seeds a first release and is bumped.
+            if (current.includes('-')) return stripToCore(current);
+            return bump === 'none' ? stripToCore(current) : nextSemver(stripToCore(current), bump);
+        }
+        return FIRST_RELEASE_VERSION;
     }
     if (scheme === 'calver') {
-        // nextCalver renders fresh (micro 0) when the current version is
-        // unparseable, so an empty string is the correct "first release" input.
-        return nextCalver(stable ?? '', pattern ?? DEFAULT_CALVER_PATTERN, now);
+        // nextCalver renders fresh (micro 0) when the input is unparseable, so an
+        // empty string is the correct "first release" input.
+        return nextCalver(
+            stable ?? (current ? stripToCore(current) : ''),
+            pattern ?? DEFAULT_CALVER_PATTERN,
+            now,
+        );
     }
     if (scheme === 'incremental') {
-        return nextIncremental(stable ?? '0');
+        return nextIncremental(stable ?? (current ? stripToCore(current) : '0'));
     }
     const exhaustive: never = scheme;
     throw new Error(`Unknown versioning scheme: ${String(exhaustive)}`);
