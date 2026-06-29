@@ -2,6 +2,7 @@ import semver from 'semver';
 import {
     DEFAULT_CALVER_PATTERN,
     type BumpType,
+    type ReleaseChannel,
     type RepoConfig,
     type VersioningScheme,
 } from '@tagline-sh/shared';
@@ -248,4 +249,121 @@ function appendPreReleaseSuffix(base: string, branch: string, config: RepoConfig
         return `${base}-${config.preReleaseSuffix.development}.0`;
     }
     return base;
+}
+
+// --- Release channels --------------------------------------------------------
+
+/** The release channel a branch maps to, or `null` if the branch isn't a channel. */
+export function channelForBranch(config: RepoConfig, branch: string): ReleaseChannel | null {
+    return config.channels.find((c) => c.branch === branch) ?? null;
+}
+
+/** The repo's stable (production) channel, or `null` if none is configured. */
+export function stableChannel(config: RepoConfig): ReleaseChannel | null {
+    return config.channels.find((c) => c.tier === 'stable') ?? null;
+}
+
+export interface ChannelVersionInput {
+    /** The channel being released (its branch + tier + suffix). */
+    channel: ReleaseChannel;
+    /**
+     * The latest STABLE version of this release line (no pre-release segment),
+     * or `null` for a first release. The base is always anchored here so that
+     * `alpha` and `rc` for the same upcoming release agree on the base version
+     * and promotion never re-bumps.
+     */
+    lastStableVersion: string | null;
+    /** Aggregated bump since the last stable. Only used by the `semver` scheme. */
+    bump: BumpType;
+    scheme: VersioningScheme;
+    /** Calver pattern; defaults to {@link DEFAULT_CALVER_PATTERN}. */
+    pattern?: string | null;
+    /**
+     * All version strings already cut on this line (stable + pre-release), with
+     * any package prefix and leading `v` stripped. Used to DERIVE the next
+     * pre-release counter — `max(existing N for this base+suffix) + 1` — so the
+     * counter auto-resets to 0 whenever the base bumps or the channel changes.
+     */
+    knownVersions?: string[];
+    /** Injectable `now` (calver / determinism). Defaults to `new Date()`. */
+    now?: Date;
+}
+
+/**
+ * Compute the next version for a release CHANNEL — the channel-aware successor
+ * to {@link calculateNextVersion}.
+ *
+ *   - `stable`     → the clean base version (`0.2.0`, `2026.6.0`, `42`).
+ *   - `prerelease` → `{base}-{suffix}.{N}` (`0.2.0-alpha.1`).
+ *
+ * The base is anchored to `lastStableVersion` (+ `bump` for semver, the date
+ * for calver, +1 for incremental). The pre-release counter `N` is derived from
+ * `knownVersions`, not stored — see {@link ChannelVersionInput.knownVersions}.
+ */
+export function computeChannelVersion(input: ChannelVersionInput): string {
+    const { channel, lastStableVersion, bump, scheme, knownVersions = [] } = input;
+    const now = input.now ?? new Date();
+    const pattern = input.pattern ?? null;
+
+    const base = computeBase(scheme, lastStableVersion, bump, pattern, now);
+
+    if (channel.tier === 'stable') return base;
+
+    if (!channel.suffix) {
+        throw new Error(
+            `Release channel for branch '${channel.branch}' is a pre-release tier but has no suffix.`,
+        );
+    }
+    const n = nextPreReleaseNumber(base, channel.suffix, knownVersions);
+    return `${base}-${channel.suffix}.${n}`;
+}
+
+/** Strip a leading `v` and any pre-release/build segment, leaving the release core. */
+function stripToCore(version: string): string {
+    const noV = version.startsWith('v') ? version.slice(1) : version;
+    return noV.replace(/[-+].*$/, '');
+}
+
+/** Compute the base (stable-target) version for the active scheme. */
+function computeBase(
+    scheme: VersioningScheme,
+    lastStableVersion: string | null,
+    bump: BumpType,
+    pattern: string | null,
+    now: Date,
+): string {
+    const stable = lastStableVersion ? stripToCore(lastStableVersion) : null;
+
+    if (scheme === 'semver') {
+        if (!stable) return FIRST_RELEASE_VERSION;
+        if (bump === 'none') return stable;
+        return nextSemver(stable, bump);
+    }
+    if (scheme === 'calver') {
+        // nextCalver renders fresh (micro 0) when the current version is
+        // unparseable, so an empty string is the correct "first release" input.
+        return nextCalver(stable ?? '', pattern ?? DEFAULT_CALVER_PATTERN, now);
+    }
+    if (scheme === 'incremental') {
+        return nextIncremental(stable ?? '0');
+    }
+    const exhaustive: never = scheme;
+    throw new Error(`Unknown versioning scheme: ${String(exhaustive)}`);
+}
+
+/**
+ * Next pre-release counter for `{base}-{suffix}.N`: one past the highest N
+ * already present in `knownVersions` for this exact base+suffix, or 0 if none.
+ * Deriving from existing versions (rather than a stored counter) is what makes
+ * the counter reset automatically on a base bump or a channel change.
+ */
+function nextPreReleaseNumber(base: string, suffix: string, knownVersions: string[]): number {
+    const re = new RegExp(`^${escapeRegex(base)}-${escapeRegex(suffix)}\\.(\\d+)$`);
+    let max = -1;
+    for (const v of knownVersions) {
+        const candidate = v.startsWith('v') ? v.slice(1) : v;
+        const m = re.exec(candidate);
+        if (m) max = Math.max(max, Number(m[1]));
+    }
+    return max + 1;
 }

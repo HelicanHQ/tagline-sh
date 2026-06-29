@@ -107,7 +107,16 @@ export const VersioningConfigSchema = z.object({
     pattern: z.string().nullable(),
 });
 
+export const ChannelTierSchema = z.enum(['stable', 'prerelease']);
+
+export const ReleaseChannelSchema = z.object({
+    branch: z.string().min(1),
+    tier: ChannelTierSchema,
+    suffix: z.string().min(1).nullable(),
+});
+
 export const RepoConfigSchema = z.object({
+    channels: z.array(ReleaseChannelSchema).min(1),
     branches: z.object({
         production: z.string(),
         staging: z.string().nullable(),

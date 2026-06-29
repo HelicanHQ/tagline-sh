@@ -116,3 +116,35 @@ describe('readRepoConfig', () => {
         expect(cfg.versioning.scheme).toBe('semver');
     });
 });
+
+describe('readRepoConfig — channels', () => {
+    it('derives channels from legacy Branches + Pre-release Tags when ## Channels is absent', async () => {
+        const reader = new FakeGitHubReader({ files: { '.release-agent.md': FULL_CONFIG } });
+        const cfg = await readRepoConfig(reader, ANY_REPO);
+        expect(cfg.channels).toEqual([
+            { branch: 'main', tier: 'stable', suffix: null },
+            { branch: 'staging', tier: 'prerelease', suffix: 'rc' },
+            { branch: 'develop', tier: 'prerelease', suffix: 'alpha' },
+        ]);
+    });
+
+    it('parses an explicit ## Channels section (arbitrary tiers, case-preserved branches)', async () => {
+        const md = `## Channels\n\n- main: stable\n- staging: rc\n- Develop: alpha\n- canary: beta\n`;
+        const reader = new FakeGitHubReader({ files: { '.release-agent.md': md } });
+        const cfg = await readRepoConfig(reader, ANY_REPO);
+        expect(cfg.channels).toEqual([
+            { branch: 'main', tier: 'stable', suffix: null },
+            { branch: 'staging', tier: 'prerelease', suffix: 'rc' },
+            // Branch case preserved (git is case-sensitive); label lower-cased.
+            { branch: 'Develop', tier: 'prerelease', suffix: 'alpha' },
+            { branch: 'canary', tier: 'prerelease', suffix: 'beta' },
+        ]);
+    });
+
+    it('explicit ## Channels overrides the legacy derivation', async () => {
+        const md = `${FULL_CONFIG}\n## Channels\n\n- trunk: stable\n`;
+        const reader = new FakeGitHubReader({ files: { '.release-agent.md': md } });
+        const cfg = await readRepoConfig(reader, ANY_REPO);
+        expect(cfg.channels).toEqual([{ branch: 'trunk', tier: 'stable', suffix: null }]);
+    });
+});

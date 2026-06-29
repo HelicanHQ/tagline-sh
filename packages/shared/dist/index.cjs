@@ -27,6 +27,7 @@ __export(index_exports, {
   BUMP_PRIORITY: () => BUMP_PRIORITY,
   BumpTypeSchema: () => BumpTypeSchema,
   COMMIT_TYPE_BUMP: () => COMMIT_TYPE_BUMP,
+  ChannelTierSchema: () => ChannelTierSchema,
   CommitTypeSchema: () => CommitTypeSchema,
   DEFAULT_CALVER_PATTERN: () => DEFAULT_CALVER_PATTERN,
   DEFAULT_CONFIG: () => DEFAULT_CONFIG,
@@ -44,6 +45,7 @@ __export(index_exports, {
   RELEASE_ISSUE_MARKER_END: () => RELEASE_ISSUE_MARKER_END,
   RELEASE_ISSUE_MARKER_START: () => RELEASE_ISSUE_MARKER_START,
   RELEASE_WORKFLOW_FILE: () => RELEASE_WORKFLOW_FILE,
+  ReleaseChannelSchema: () => ReleaseChannelSchema,
   ReleasePlanSchema: () => ReleasePlanSchema,
   ReleaseResultSchema: () => ReleaseResultSchema,
   ReleaseSummarySchema: () => ReleaseSummarySchema,
@@ -101,6 +103,14 @@ var DEFAULT_VERSIONING = {
   pattern: null
 };
 var DEFAULT_CONFIG = {
+  // Derived from the legacy branch defaults below: production → stable,
+  // staging → rc, development → alpha. The order is meaningful only for
+  // display; channel lookup is by branch name.
+  channels: [
+    { branch: "main", tier: "stable", suffix: null },
+    { branch: "staging", tier: "prerelease", suffix: "rc" },
+    { branch: "develop", tier: "prerelease", suffix: "alpha" }
+  ],
   branches: {
     production: "main",
     staging: "staging",
@@ -274,7 +284,14 @@ var VersioningConfigSchema = import_zod.z.object({
   scheme: VersioningSchemeSchema,
   pattern: import_zod.z.string().nullable()
 });
+var ChannelTierSchema = import_zod.z.enum(["stable", "prerelease"]);
+var ReleaseChannelSchema = import_zod.z.object({
+  branch: import_zod.z.string().min(1),
+  tier: ChannelTierSchema,
+  suffix: import_zod.z.string().min(1).nullable()
+});
 var RepoConfigSchema = import_zod.z.object({
+  channels: import_zod.z.array(ReleaseChannelSchema).min(1),
   branches: import_zod.z.object({
     production: import_zod.z.string(),
     staging: import_zod.z.string().nullable(),
@@ -431,6 +448,7 @@ function buildReleaseIssueMonorepoClosingCommentBody(args) {
   BUMP_PRIORITY,
   BumpTypeSchema,
   COMMIT_TYPE_BUMP,
+  ChannelTierSchema,
   CommitTypeSchema,
   DEFAULT_CALVER_PATTERN,
   DEFAULT_CONFIG,
@@ -448,6 +466,7 @@ function buildReleaseIssueMonorepoClosingCommentBody(args) {
   RELEASE_ISSUE_MARKER_END,
   RELEASE_ISSUE_MARKER_START,
   RELEASE_WORKFLOW_FILE,
+  ReleaseChannelSchema,
   ReleasePlanSchema,
   ReleaseResultSchema,
   ReleaseSummarySchema,
