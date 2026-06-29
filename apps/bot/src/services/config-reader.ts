@@ -5,6 +5,7 @@ import type { Heading, List, ListItem, Root, Text } from 'mdast';
 import {
     DEFAULT_CONFIG,
     DEFAULT_VERSIONING,
+    type ReleaseChannel,
     type RepoConfig,
     type VersioningConfig,
     type VersioningScheme,
@@ -19,6 +20,7 @@ const BRANCHES_HEADING = /^branches$/i;
 const PRERELEASE_HEADING = /^pre[- ]?release tags?$/i;
 const NOTES_HEADING = /^release notes? style$/i;
 const VERSIONING_HEADING = /^versioning$/i;
+const CHANNELS_HEADING = /^channels$/i;
 
 const VALID_SCHEMES: ReadonlySet<VersioningScheme> = new Set(['semver', 'calver', 'incremental']);
 
@@ -26,6 +28,8 @@ interface ParsedSections {
     branches: Record<string, string>;
     preRelease: Record<string, string>;
     versioning: Record<string, string>;
+    /** Ordered, case-preserving `- <branch>: <tier|suffix>` pairs from `## Channels`. */
+    channels: Array<{ branch: string; label: string }>;
     notesStyle: string;
     customContext: string;
 }
@@ -46,27 +50,76 @@ export async function readRepoConfig(
 
     const sections = parseSections(content);
 
+    const branches = {
+        production: sections.branches['production'] ?? DEFAULT_CONFIG.branches.production,
+        staging: sections.branches['staging'] ?? DEFAULT_CONFIG.branches.staging,
+        development: sections.branches['development'] ?? DEFAULT_CONFIG.branches.development,
+    };
+    const preReleaseSuffix = {
+        staging:
+            sections.preRelease['staging suffix'] ??
+            sections.preRelease['staging'] ??
+            DEFAULT_CONFIG.preReleaseSuffix.staging,
+        development:
+            sections.preRelease['development suffix'] ??
+            sections.preRelease['development'] ??
+            DEFAULT_CONFIG.preReleaseSuffix.development,
+    };
+
     return {
-        branches: {
-            production: sections.branches['production'] ?? DEFAULT_CONFIG.branches.production,
-            staging: sections.branches['staging'] ?? DEFAULT_CONFIG.branches.staging,
-            development: sections.branches['development'] ?? DEFAULT_CONFIG.branches.development,
-        },
-        preReleaseSuffix: {
-            staging:
-                sections.preRelease['staging suffix'] ??
-                sections.preRelease['staging'] ??
-                DEFAULT_CONFIG.preReleaseSuffix.staging,
-            development:
-                sections.preRelease['development suffix'] ??
-                sections.preRelease['development'] ??
-                DEFAULT_CONFIG.preReleaseSuffix.development,
-        },
+        channels: resolveChannels(sections.channels, branches, preReleaseSuffix),
+        branches,
+        preReleaseSuffix,
         versioning: resolveVersioning(sections.versioning),
         releaseNotesStyle: sections.notesStyle.trim(),
         customContext: sections.customContext.trim(),
         rawContent: content,
     };
+}
+
+/**
+ * Build the channel list. An explicit `## Channels` section wins; otherwise we
+ * derive channels from the legacy `## Branches` + `## Pre-release Tags` config
+ * so existing repos gain the channel model for free:
+ *   production → stable, staging → rc, development → alpha.
+ *
+ * In `## Channels`, each `- <branch>: <label>` line means: `stable` → the
+ * production line (clean versions), anything else → a pre-release channel whose
+ * `<label>` is the suffix (`alpha`, `rc`, `beta`, …). Branch names keep their
+ * original case; labels are lower-cased.
+ */
+function resolveChannels(
+    pairs: Array<{ branch: string; label: string }>,
+    branches: RepoConfig['branches'],
+    preReleaseSuffix: RepoConfig['preReleaseSuffix'],
+): ReleaseChannel[] {
+    if (pairs.length > 0) {
+        return pairs.map(({ branch, label }) => {
+            const tierLabel = label.toLowerCase();
+            return tierLabel === 'stable'
+                ? { branch, tier: 'stable', suffix: null }
+                : { branch, tier: 'prerelease', suffix: tierLabel };
+        });
+    }
+
+    const channels: ReleaseChannel[] = [
+        { branch: branches.production, tier: 'stable', suffix: null },
+    ];
+    if (branches.staging) {
+        channels.push({
+            branch: branches.staging,
+            tier: 'prerelease',
+            suffix: preReleaseSuffix.staging,
+        });
+    }
+    if (branches.development) {
+        channels.push({
+            branch: branches.development,
+            tier: 'prerelease',
+            suffix: preReleaseSuffix.development,
+        });
+    }
+    return channels;
 }
 
 /**
@@ -105,6 +158,7 @@ function parseSections(markdown: string): ParsedSections {
     const branches: Record<string, string> = {};
     const preRelease: Record<string, string> = {};
     const versioning: Record<string, string> = {};
+    const channels: Array<{ branch: string; label: string }> = [];
     const notesStyleParts: string[] = [];
     const customContextParts: string[] = [];
 
@@ -128,6 +182,8 @@ function parseSections(markdown: string): ParsedSections {
             Object.assign(preRelease, extractKeyValueList(currentBody));
         } else if (VERSIONING_HEADING.test(currentHeading)) {
             Object.assign(versioning, extractKeyValueList(currentBody));
+        } else if (CHANNELS_HEADING.test(currentHeading)) {
+            channels.push(...extractChannelPairs(currentBody));
         } else if (NOTES_HEADING.test(currentHeading)) {
             notesStyleParts.push(stringifyNodes(markdown, currentBody));
         } else {
@@ -153,9 +209,31 @@ function parseSections(markdown: string): ParsedSections {
         branches,
         preRelease,
         versioning,
+        channels,
         notesStyle: notesStyleParts.join('\n\n'),
         customContext: customContextParts.join('\n\n'),
     };
+}
+
+/**
+ * Extract ordered `- <branch>: <label>` pairs from the `## Channels` list,
+ * preserving the branch name's original case (git branch names are
+ * case-sensitive, unlike the lower-cased keys in `extractKeyValueList`).
+ */
+function extractChannelPairs(nodes: Root['children']): Array<{ branch: string; label: string }> {
+    const out: Array<{ branch: string; label: string }> = [];
+    for (const node of nodes) {
+        if (node.type !== 'list') continue;
+        for (const item of (node as List).children) {
+            const line = listItemText(item as ListItem);
+            const colonIdx = line.indexOf(':');
+            if (colonIdx === -1) continue;
+            const branch = line.slice(0, colonIdx).trim();
+            const label = line.slice(colonIdx + 1).trim();
+            if (branch && label) out.push({ branch, label });
+        }
+    }
+    return out;
 }
 
 function headingText(heading: Heading): string {

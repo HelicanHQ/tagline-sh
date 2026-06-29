@@ -30,6 +30,14 @@ var DEFAULT_VERSIONING = {
   pattern: null
 };
 var DEFAULT_CONFIG = {
+  // Derived from the legacy branch defaults below: production → stable,
+  // staging → rc, development → alpha. The order is meaningful only for
+  // display; channel lookup is by branch name.
+  channels: [
+    { branch: "main", tier: "stable", suffix: null },
+    { branch: "staging", tier: "prerelease", suffix: "rc" },
+    { branch: "develop", tier: "prerelease", suffix: "alpha" }
+  ],
   branches: {
     production: "main",
     staging: "staging",
@@ -203,7 +211,14 @@ var VersioningConfigSchema = z.object({
   scheme: VersioningSchemeSchema,
   pattern: z.string().nullable()
 });
+var ChannelTierSchema = z.enum(["stable", "prerelease"]);
+var ReleaseChannelSchema = z.object({
+  branch: z.string().min(1),
+  tier: ChannelTierSchema,
+  suffix: z.string().min(1).nullable()
+});
 var RepoConfigSchema = z.object({
+  channels: z.array(ReleaseChannelSchema).min(1),
   branches: z.object({
     production: z.string(),
     staging: z.string().nullable(),
@@ -359,6 +374,7 @@ export {
   BUMP_PRIORITY,
   BumpTypeSchema,
   COMMIT_TYPE_BUMP,
+  ChannelTierSchema,
   CommitTypeSchema,
   DEFAULT_CALVER_PATTERN,
   DEFAULT_CONFIG,
@@ -376,6 +392,7 @@ export {
   RELEASE_ISSUE_MARKER_END,
   RELEASE_ISSUE_MARKER_START,
   RELEASE_WORKFLOW_FILE,
+  ReleaseChannelSchema,
   ReleasePlanSchema,
   ReleaseResultSchema,
   ReleaseSummarySchema,

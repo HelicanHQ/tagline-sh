@@ -47,6 +47,35 @@ export interface VersioningConfig {
     pattern: string | null;
 }
 
+/**
+ * Stability tier of a release channel.
+ *   - `stable`     → clean version (`0.2.0`); the production line.
+ *   - `prerelease` → version carries a `-{suffix}.N` segment (`0.2.0-alpha.1`).
+ */
+export type ChannelTier = 'stable' | 'prerelease';
+
+/**
+ * A release channel maps ONE git branch to a stability tier (semantic-release's
+ * "branches" model / npm dist-tags). Merges into `branch` produce releases of
+ * that tier. A repo declares any number of channels in `.release-agent.md`:
+ *
+ *   - single-trunk repo → one `stable` channel (`main`).
+ *   - gitflow repo      → `development`=alpha, `staging`=rc, `main`=stable.
+ *   - custom            → add `beta`, `canary`, … with no code changes.
+ *
+ * Invariant: exactly one channel SHOULD be `stable` (the production line).
+ * `prerelease` channels MUST carry a non-null `suffix`; the next version on
+ * that branch is `{base}-{suffix}.{N}` where `base` is anchored to the last
+ * STABLE release and `N` is derived from existing tags (auto-resets per base).
+ */
+export interface ReleaseChannel {
+    /** Git branch this channel releases from, e.g. `main`, `staging`, `develop`. */
+    branch: string;
+    tier: ChannelTier;
+    /** Pre-release identifier for `prerelease` tiers (`alpha`, `rc`, `beta`); `null` for `stable`. */
+    suffix: string | null;
+}
+
 export interface ParsedCommit {
     type: CommitType;
     scope: string | null;
@@ -84,6 +113,18 @@ export interface MonorepoInfo {
 }
 
 export interface RepoConfig {
+    /**
+     * Release channels (the general model — see {@link ReleaseChannel}). The bot
+     * watches every channel branch for merges. Derived from the `## Channels`
+     * section, or from the legacy `## Branches` + `## Pre-release Tags` sections
+     * for back-compat. Always non-empty (at least the stable production channel).
+     */
+    channels: ReleaseChannel[];
+    /**
+     * Legacy branch config, retained for back-compat with code/tests that read
+     * `branches.production` directly. The stable channel's branch is the source
+     * of truth; `channels` is the forward-looking representation.
+     */
     branches: {
         production: string;
         staging: string | null;

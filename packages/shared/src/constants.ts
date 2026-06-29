@@ -73,6 +73,14 @@ export const DEFAULT_VERSIONING: VersioningConfig = {
 };
 
 export const DEFAULT_CONFIG: RepoConfig = {
+    // Derived from the legacy branch defaults below: production → stable,
+    // staging → rc, development → alpha. The order is meaningful only for
+    // display; channel lookup is by branch name.
+    channels: [
+        { branch: 'main', tier: 'stable', suffix: null },
+        { branch: 'staging', tier: 'prerelease', suffix: 'rc' },
+        { branch: 'develop', tier: 'prerelease', suffix: 'alpha' },
+    ],
     branches: {
         production: 'main',
         staging: 'staging',

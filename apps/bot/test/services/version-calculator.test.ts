@@ -1,6 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_CONFIG, type RepoConfig } from '@tagline-sh/shared';
-import { calculateNextVersion } from '../../src/services/version-calculator.js';
+import { DEFAULT_CONFIG, type ReleaseChannel, type RepoConfig } from '@tagline-sh/shared';
+import {
+    calculateNextVersion,
+    channelForBranch,
+    computeChannelVersion,
+    stableChannel,
+} from '../../src/services/version-calculator.js';
+
+const ALPHA: ReleaseChannel = { branch: 'development', tier: 'prerelease', suffix: 'alpha' };
+const RC: ReleaseChannel = { branch: 'staging', tier: 'prerelease', suffix: 'rc' };
+const STABLE: ReleaseChannel = { branch: 'main', tier: 'stable', suffix: null };
 
 function calverConfig(pattern: string): RepoConfig {
     return {
@@ -184,5 +193,160 @@ describe('calculateNextVersion — incremental', () => {
 
     it('appends pre-release suffix on staging', () => {
         expect(calculateNextVersion('41', 'none', 'staging', config)).toBe('42-rc.0');
+    });
+});
+
+// --- Release channels --------------------------------------------------------
+
+describe('channelForBranch / stableChannel', () => {
+    it('resolves a branch to its channel', () => {
+        expect(channelForBranch(DEFAULT_CONFIG, 'main')).toEqual({
+            branch: 'main',
+            tier: 'stable',
+            suffix: null,
+        });
+        expect(channelForBranch(DEFAULT_CONFIG, 'develop')).toEqual({
+            branch: 'develop',
+            tier: 'prerelease',
+            suffix: 'alpha',
+        });
+    });
+
+    it('returns null for a non-channel branch', () => {
+        expect(channelForBranch(DEFAULT_CONFIG, 'feature/x')).toBeNull();
+    });
+
+    it('finds the stable channel', () => {
+        expect(stableChannel(DEFAULT_CONFIG)?.branch).toBe('main');
+    });
+});
+
+describe('computeChannelVersion — semver gitflow (dev→staging→prod)', () => {
+    const common = {
+        bump: 'minor' as const,
+        scheme: 'semver' as const,
+        lastStableVersion: '0.1.1',
+    };
+
+    it('alpha: first pre-release of the next minor', () => {
+        expect(computeChannelVersion({ ...common, channel: ALPHA, knownVersions: [] })).toBe(
+            '0.2.0-alpha.0',
+        );
+    });
+
+    it('alpha: counter increments while the base is unchanged', () => {
+        expect(
+            computeChannelVersion({
+                ...common,
+                channel: ALPHA,
+                knownVersions: ['0.2.0-alpha.0', '0.2.0-alpha.1'],
+            }),
+        ).toBe('0.2.0-alpha.2');
+    });
+
+    it('rc: counter resets on channel change (same base, different suffix)', () => {
+        expect(
+            computeChannelVersion({
+                ...common,
+                channel: RC,
+                knownVersions: ['0.2.0-alpha.0', '0.2.0-alpha.1'],
+            }),
+        ).toBe('0.2.0-rc.0');
+    });
+
+    it('stable: clean version, suffix dropped', () => {
+        expect(
+            computeChannelVersion({
+                ...common,
+                channel: STABLE,
+                knownVersions: ['0.2.0-alpha.1', '0.2.0-rc.0'],
+            }),
+        ).toBe('0.2.0');
+    });
+
+    it('alpha for the same base always agrees with rc (anchored to last stable)', () => {
+        // Whatever channel, the base is 0.2.0 because last stable is 0.1.1 + minor.
+        const a = computeChannelVersion({ ...common, channel: ALPHA, knownVersions: [] });
+        const r = computeChannelVersion({ ...common, channel: RC, knownVersions: [] });
+        expect(a.startsWith('0.2.0-')).toBe(true);
+        expect(r.startsWith('0.2.0-')).toBe(true);
+    });
+
+    it('counter resets when the base bumps (prior alpha tags are for an older base)', () => {
+        // Last stable is now 0.2.0; the next minor base is 0.3.0, so the 0.2.0
+        // alphas are irrelevant and the new line starts at alpha.0.
+        expect(
+            computeChannelVersion({
+                channel: ALPHA,
+                scheme: 'semver',
+                bump: 'minor',
+                lastStableVersion: '0.2.0',
+                knownVersions: ['0.2.0-alpha.0', '0.2.0-alpha.1', '0.2.0-rc.0'],
+            }),
+        ).toBe('0.3.0-alpha.0');
+    });
+
+    it('first release (no prior stable): 0.1.0 and 0.1.0-alpha.0', () => {
+        expect(
+            computeChannelVersion({
+                channel: STABLE,
+                scheme: 'semver',
+                bump: 'minor',
+                lastStableVersion: null,
+            }),
+        ).toBe('0.1.0');
+        expect(
+            computeChannelVersion({
+                channel: ALPHA,
+                scheme: 'semver',
+                bump: 'minor',
+                lastStableVersion: null,
+            }),
+        ).toBe('0.1.0-alpha.0');
+    });
+
+    it('ignores known versions for a different suffix or base', () => {
+        expect(
+            computeChannelVersion({
+                ...common,
+                channel: ALPHA,
+                knownVersions: ['0.2.0-rc.4', '0.1.0-alpha.9', '0.2.0'],
+            }),
+        ).toBe('0.2.0-alpha.0');
+    });
+});
+
+describe('computeChannelVersion — calver + incremental channels', () => {
+    const JUN_01_2026 = new Date(Date.UTC(2026, 5, 1, 12, 0, 0));
+
+    it('calver stable rolls to the new month, alpha appends the suffix', () => {
+        const cal = { scheme: 'calver' as const, bump: 'none' as const, pattern: 'YYYY.MM.MICRO' };
+        expect(
+            computeChannelVersion({
+                ...cal,
+                channel: STABLE,
+                lastStableVersion: '2026.5.3',
+                now: JUN_01_2026,
+            }),
+        ).toBe('2026.6.0');
+        expect(
+            computeChannelVersion({
+                ...cal,
+                channel: ALPHA,
+                lastStableVersion: '2026.5.3',
+                now: JUN_01_2026,
+                knownVersions: ['2026.6.0-alpha.0'],
+            }),
+        ).toBe('2026.6.0-alpha.1');
+    });
+
+    it('incremental stable +1, alpha appends the suffix', () => {
+        const inc = { scheme: 'incremental' as const, bump: 'none' as const };
+        expect(computeChannelVersion({ ...inc, channel: STABLE, lastStableVersion: '41' })).toBe(
+            '42',
+        );
+        expect(computeChannelVersion({ ...inc, channel: ALPHA, lastStableVersion: '41' })).toBe(
+            '42-alpha.0',
+        );
     });
 });
