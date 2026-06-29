@@ -3,21 +3,32 @@
 # This file is optional. Tagline works out of the box with sensible defaults
 # for repos that follow conventional commits.
 #
-# Three sections below are parsed deterministically (look for `## Branches`,
-# `## Pre-release Tags`, and `## Versioning`). Anything else in this file is
-# passed to the AI as free-form context — write whatever a teammate would need
-# to know about how your team releases.
+# Deterministically parsed sections: `## Channels` (or the legacy `## Branches`
+# + `## Pre-release Tags`) and `## Versioning`. Anything else is passed to the
+# AI as free-form context — write whatever a teammate would need to know.
 
-## Branches
+## Channels
 
-- production: main
-- staging: staging
-- development: develop
+# A release channel maps a branch to a stability tier. Tagline watches every
+# channel branch: a merge into it opens that channel's own release issue and
+# ships a version with the channel's suffix. `stable` → clean (0.2.0); anything
+# else is a pre-release suffix (rc → 0.2.0-rc.N, alpha → 0.2.0-alpha.N, …).
+# The base anchors to the last stable release and stays fixed as you promote
+# dev → staging → prod; only the suffix/counter change.
 
-## Pre-release Tags
+- main: stable
+- staging: rc
+- develop: alpha
 
-- staging suffix: rc
-- development suffix: alpha
+# Legacy shorthand (still supported; derived into channels when ## Channels is
+# absent): the `## Branches` + `## Pre-release Tags` sections —
+#   ## Branches
+#   - production: main
+#   - staging: staging
+#   - development: develop
+#   ## Pre-release Tags
+#   - staging suffix: rc
+#   - development suffix: alpha
 
 ## Versioning
 

@@ -4,7 +4,6 @@ import type {
     ReleasePlan,
     ReleaseSummary,
     RepoConfig,
-    VersioningScheme,
 } from '@tagline-sh/shared';
 import {
     buildSummaryMarkdown,
@@ -14,12 +13,16 @@ import {
 } from '@tagline-sh/shared';
 import {
     buildPackagePlans,
-    calculateNextVersion,
+    channelForBranch,
+    computeChannelVersion,
+    deriveLineVersions,
     deterministicReport,
     OctokitGitHubReader,
     readRepoConfig,
+    stableChannel,
     type ReaderOctokit,
 } from '~/app/services';
+import type { ReleaseChannel } from '@tagline-sh/shared';
 import { buildReleaseReport } from '~/app/commands/release-report';
 
 export interface ApproveCommand {
@@ -267,12 +270,20 @@ export async function buildApprovePlan(
         }
     }
 
+    // Channel + tags drive channel-aware version computation (alpha/rc/stable
+    // suffix + derived counter). Gathered once and reused for both the
+    // single-repo version and any per-package re-derivation below.
+    const reader = new OctokitGitHubReader(input.octokit);
+    const tags = await reader.listTags({ owner: input.owner, repo: input.repo });
+    const channel: ReleaseChannel = channelForBranch(config, report.baseBranch) ??
+        stableChannel(config) ?? { branch: report.baseBranch, tier: 'stable', suffix: null };
+
     const finalBump: BumpType = input.command.bumpOverride ?? report.suggestedBump;
     const finalVersion = input.command.versionOverride
         ? input.command.versionOverride
         : isMonorepoRelease
           ? report.suggestedVersion // event-id; per-package versions live in `packages`
-          : computeFinalVersion(scheme, finalBump, report, config);
+          : computeSingleRepoVersion(channel, tags, report, finalBump, config);
 
     // Per-package plans: carry forward from the report preview, OR re-derive
     // with user-supplied `name:bump` overrides applied (M3.4). Re-derivation
@@ -285,6 +296,8 @@ export async function buildApprovePlan(
             monorepoInfo: report.monorepoInfo,
             branch: report.baseBranch,
             config,
+            channel,
+            tags,
             bumpOverrides: input.command.packageBumpOverrides,
         });
     }
@@ -362,20 +375,28 @@ function buildRootMonorepoChangelogEntry(
 }
 
 /**
- * Resolve the final version string for the release.
- *
- * SemVer's `bump === 'none'` short-circuits to the current version (no change).
- * CalVer/Incremental always advance — their next version is determined by the
- * scheme regardless of conventional-commit bumps.
+ * Resolve the final single-repo version, channel-aware. Reuses the same
+ * `computeChannelVersion` math the report did, so with no override it reproduces
+ * `report.suggestedVersion` exactly; with a semver bump override it recomputes
+ * the base (and the pre-release counter re-derives from the fresh base).
  */
-function computeFinalVersion(
-    scheme: VersioningScheme,
+function computeSingleRepoVersion(
+    channel: ReleaseChannel,
+    tags: Parameters<typeof deriveLineVersions>[0],
+    report: { currentVersion: string },
     finalBump: BumpType,
-    report: { currentVersion: string; baseBranch: string },
     config: RepoConfig,
 ): string {
-    if (scheme === 'semver' && finalBump === 'none') return report.currentVersion;
-    return calculateNextVersion(report.currentVersion, finalBump, report.baseBranch, config);
+    const { lastStableVersion, knownVersions } = deriveLineVersions(tags);
+    return computeChannelVersion({
+        channel,
+        lastStableVersion,
+        currentVersion: report.currentVersion,
+        bump: finalBump,
+        scheme: config.versioning.scheme,
+        pattern: config.versioning.pattern,
+        knownVersions,
+    });
 }
 
 function emptyPlan(

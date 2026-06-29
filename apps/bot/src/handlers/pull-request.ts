@@ -1,6 +1,6 @@
 import type { ParsedPR } from '@tagline-sh/shared';
 import type { Context, Probot } from 'probot';
-import { getPRsSinceLastTag, readRepoConfig } from '~/app/services';
+import { channelForBranch, getPRsSinceLastTag, readRepoConfig } from '~/app/services';
 import { OctokitGitHubReader, type ReaderOctokit } from '~/app/services/octokit-reader';
 import type { GitHubReader, PullRequestSummary, RepoRef } from '~/app/services/github-reader';
 import {
@@ -21,7 +21,7 @@ const asReleaseIssue = (octokit: Context['octokit']): ReleaseIssueOctokit =>
  * Probot handler's logging; not part of the user-facing UX.
  */
 export type ManageReleaseIssueOutcome =
-    | { kind: 'skipped'; reason: 'not-merged' | 'release-branch' | 'non-production' | 'no-prs' }
+    | { kind: 'skipped'; reason: 'not-merged' | 'release-branch' | 'non-channel' | 'no-prs' }
     | { kind: 'created'; issueNumber: number }
     | { kind: 'updated'; issueNumber: number };
 
@@ -60,8 +60,8 @@ export interface ManageReleaseIssueInput {
  *   - Not merged → skip ('not-merged').
  *   - Head ref starts with `release/` → skip ('release-branch'); Phase B
  *     closes the release issue itself in that case.
- *   - Base ref is not the configured production branch → skip
- *     ('non-production'); staging/dev are user-driven only.
+ *   - Base ref is not a configured release channel → skip ('non-channel').
+ *     Each channel branch (stable/staging/dev) gets its OWN tracking issue.
  *   - Issue already exists → re-render and update.
  *   - Issue doesn't exist → create with the current pending-PR list.
  *
@@ -86,14 +86,15 @@ export async function manageReleaseIssue(
     }
 
     const config = await readRepoConfig(deps.reader, input.repo);
-    if (input.pr.baseRef !== config.branches.production) {
-        return { kind: 'skipped', reason: 'non-production' };
+    const channel = channelForBranch(config, input.pr.baseRef);
+    if (!channel) {
+        return { kind: 'skipped', reason: 'non-channel' };
     }
 
     const { prs: searchResults, lastTag } = await getPRsSinceLastTag(
         deps.reader,
         input.repo,
-        config.branches.production,
+        channel.branch,
     );
 
     // Seed the triggering PR from the webhook payload. It has already passed
@@ -134,18 +135,20 @@ export async function manageReleaseIssue(
         bodyExcerpt: null,
     }));
 
-    const existing = await findOpenReleaseIssue(deps.octokit, input.repo);
+    const existing = await findOpenReleaseIssue(deps.octokit, input.repo, channel.branch);
     if (existing) {
         await updateReleaseIssue(deps.octokit, input.repo, {
             issueNumber: existing.number,
-            branch: config.branches.production,
+            branch: channel.branch,
+            channel,
             lastTag: lastTag?.name ?? null,
             prs,
         });
         return { kind: 'updated', issueNumber: existing.number };
     }
     const created = await createReleaseIssue(deps.octokit, input.repo, {
-        branch: config.branches.production,
+        branch: channel.branch,
+        channel,
         lastTag: lastTag?.name ?? null,
         prs,
     });
@@ -210,10 +213,7 @@ export async function handlePullRequestClosed(
                 return;
         }
     } catch (err) {
-        context.log.error(
-            { err, repo, pr: pr.number },
-            'Failed to manage release-tracking issue',
-        );
+        context.log.error({ err, repo, pr: pr.number }, 'Failed to manage release-tracking issue');
     }
 }
 

@@ -74,6 +74,55 @@ export async function getLastReleaseTag(
     return releaseTags[0] ?? null;
 }
 
+/**
+ * Versions on a single release line, derived from tags, for channel-aware
+ * version computation (see `computeChannelVersion`):
+ *   - `lastStableVersion` — the most recent STABLE (no `-prerelease`) version,
+ *     by commit date. The base anchor: `alpha`/`rc`/`stable` for the next
+ *     release all build from here.
+ *   - `knownVersions` — every version string on the line (stable + pre-release),
+ *     so the pre-release counter can be derived (`max + 1`, auto-reset).
+ *
+ * `packageName` selects a monorepo line (`@scope/name@1.2.3` tags); omit it for
+ * the single-repo line (`v1.2.3` / `1.2.3` tags).
+ */
+export function deriveLineVersions(
+    tags: TagRef[],
+    packageName?: string,
+): { lastStableVersion: string | null; knownVersions: string[] } {
+    const prefix = packageName ? `${packageName}@` : null;
+    const entries: Array<{ version: string; date: string }> = [];
+
+    for (const tag of tags) {
+        if (prefix) {
+            if (!tag.name.startsWith(prefix)) continue;
+            const version = tag.name.slice(prefix.length);
+            if (
+                /^\d+\.\d+\.\d+([+-][\w.]+)?$/.test(version) ||
+                /^\d+([+-][\w.]+)?$/.test(version)
+            ) {
+                entries.push({ version, date: tag.commitDate });
+            }
+        } else if (SEMVER_TAG_RE.test(tag.name)) {
+            entries.push({ version: tag.name.replace(/^v/, ''), date: tag.commitDate });
+        }
+    }
+
+    const knownVersions = entries.map((e) => e.version);
+    const stables = entries
+        .filter((e) => !e.version.includes('-'))
+        .sort((a, b) => {
+            const at = Date.parse(a.date);
+            const bt = Date.parse(b.date);
+            if (Number.isNaN(at) && Number.isNaN(bt)) return 0;
+            if (Number.isNaN(at)) return 1;
+            if (Number.isNaN(bt)) return -1;
+            return bt - at;
+        });
+
+    return { lastStableVersion: stables[0]?.version ?? null, knownVersions };
+}
+
 interface MinimalPackageJson {
     version?: string;
 }
