@@ -302,12 +302,24 @@ export function defaultWorkflowYaml(): string {
     ].join('\n');
 }
 
-/** Setup instructions when `.github/workflows/release-agent.yml` is missing. */
-export function missingWorkflowComment(): string {
+/**
+ * Setup instructions when `.github/workflows/release-agent.yml` is missing.
+ * `branch` names the release target — GitHub validates the `workflow_dispatch`
+ * trigger on the dispatched branch, so the workflow must exist THERE, not just
+ * on the default branch (the usual gotcha when a channel branch like `main`
+ * lags the trunk where Tagline was first set up).
+ */
+export function missingWorkflowComment(branch?: string): string {
+    const onBranch = branch ? ` on \`${branch}\`` : '';
+    const intro = branch
+        ? `This release targets the \`${branch}\` branch, and GitHub requires the workflow to ` +
+          `exist on that branch (it validates the \`workflow_dispatch\` trigger there). Add this ` +
+          `file to \`${branch}\` — e.g. by merging it from your default branch:`
+        : 'Add this file to your repo:';
     return [
-        `${APP_DISPLAY_NAME} can't trigger the release because \`.github/workflows/release-agent.yml\` is missing.`,
+        `${APP_DISPLAY_NAME} can't trigger the release because \`.github/workflows/release-agent.yml\` is missing${onBranch}.`,
         '',
-        'Add this file to your repo:',
+        intro,
         '',
         '```yaml',
         defaultWorkflowYaml(),
