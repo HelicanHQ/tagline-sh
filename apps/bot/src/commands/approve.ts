@@ -457,7 +457,12 @@ async function readConfigForCalc(input: BuildApprovePlanInput): Promise<RepoConf
 export interface DispatchOctokit {
     rest: {
         repos: {
-            getContent: (params: { owner: string; repo: string; path: string }) => Promise<unknown>;
+            getContent: (params: {
+                owner: string;
+                repo: string;
+                path: string;
+                ref?: string;
+            }) => Promise<unknown>;
         };
         actions: {
             createWorkflowDispatch: (params: {
@@ -534,10 +539,18 @@ export async function dispatchReleaseWorkflow(
     plan: ReleasePlan,
 ): Promise<DispatchResult> {
     try {
+        // Check the workflow on the SAME ref we dispatch to (`plan.baseBranch`),
+        // not the default branch. GitHub validates the `workflow_dispatch`
+        // trigger on the dispatched ref, so a workflow that exists on the default
+        // branch but is absent on `baseBranch` (common when a channel branch like
+        // `main` lags the trunk) would otherwise sail past this check and fail
+        // later with GitHub's opaque "Workflow does not have 'workflow_dispatch'
+        // trigger" — instead of our actionable missing-workflow guidance.
         await octokit.rest.repos.getContent({
             owner,
             repo,
             path: `.github/workflows/${RELEASE_WORKFLOW_FILE}`,
+            ref: plan.baseBranch,
         });
     } catch (err) {
         if (isStatus(err, 404)) return { dispatched: false, missingWorkflow: true };

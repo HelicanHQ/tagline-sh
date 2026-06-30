@@ -183,6 +183,21 @@ describe('dispatchReleaseWorkflow', () => {
         expect(decoded.nextVersion).toBe(plan.nextVersion);
     });
 
+    it('pre-checks the workflow on the dispatched ref (baseBranch), not the default branch', async () => {
+        // Regression: dispatching to a channel branch (e.g. `main`) that lacks
+        // the workflow must surface missingWorkflow, not GitHub's opaque
+        // "no workflow_dispatch trigger". The existence check must use the same
+        // ref the dispatch targets.
+        const { octokit, calls } = build({
+            getContentImpl: async () => ({ data: { type: 'file' } }),
+        });
+        const plan = { ...makePlan(), baseBranch: 'main' };
+        await dispatchReleaseWorkflow(octokit, 'acme', 'widget', plan);
+        const getContentCall = calls[0]!.mock.calls[0]?.[0] as { ref?: string; path: string };
+        expect(getContentCall.ref).toBe('main');
+        expect(getContentCall.path).toContain('release-agent.yml');
+    });
+
     it('captures dispatch errors without throwing', async () => {
         const { octokit } = build({
             getContentImpl: async () => ({ data: { type: 'file' } }),

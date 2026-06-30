@@ -9,10 +9,7 @@ import {
 } from '../commands/approve.js';
 import type { ReaderOctokit } from '~/app/services/octokit-reader';
 import { RELEASE_ISSUE_LABEL, extractMarker } from '~/app/services/release-issue';
-import {
-    findOpenReleasePR,
-    type ConflictCheckOctokit,
-} from '~/app/services/release-pr-conflict';
+import { findOpenReleasePR, type ConflictCheckOctokit } from '~/app/services/release-pr-conflict';
 import {
     acknowledgementComment,
     errorComment,
@@ -286,7 +283,7 @@ async function runApprove(
             await context.octokit.rest.issues.updateComment({
                 ...repo,
                 comment_id: ack.data.id,
-                body: missingWorkflowComment(),
+                body: missingWorkflowComment(plan.baseBranch),
             });
             return;
         }
@@ -301,10 +298,7 @@ async function runApprove(
             return;
         }
 
-        context.log.info(
-            { payloadBytes: dispatch.payloadBytes },
-            'workflow_dispatch succeeded',
-        );
+        context.log.info({ payloadBytes: dispatch.payloadBytes }, 'workflow_dispatch succeeded');
 
         await context.octokit.rest.issues.updateComment({
             ...repo,
