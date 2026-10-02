@@ -42,9 +42,10 @@ class BotStack extends Stack {
                 fileURLToPath(new URL('../apps/bot/dist-lambda', import.meta.url)),
             ),
             memorySize: 512,
-            // The AI call on /release-report can be slow. GitHub gives up waiting after 10s
-            // but the invocation keeps running and still posts the comment.
-            timeout: Duration.seconds(60),
+            // /release-report took ~41s in production (GitHub API + AI call). GitHub gives up
+            // waiting after 10s but the invocation keeps running and still posts the comment.
+            // Billing is per actual ms, so a generous ceiling costs nothing.
+            timeout: Duration.minutes(5),
             logGroup: new logs.LogGroup(this, 'BotLogs', {
                 retention: logs.RetentionDays.TWO_WEEKS,
                 removalPolicy: RemovalPolicy.DESTROY,
