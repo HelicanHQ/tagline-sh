@@ -4,7 +4,7 @@
 
 - **Webhook authentication.** Probot v13 verifies HMAC signatures on every webhook against a per-install `WEBHOOK_SECRET`; invalid payloads are rejected.
 - **TLS** on every external hop (GitHub ↔ bot, bot → OpenRouter, action → GitHub).
-- **Secrets** (GitHub App private key, webhook secret, AI API key) live in environment variables on the host — never in source.
+- **Secrets** (GitHub App private key, webhook secret, AI API key) live in AWS Secrets Manager and are injected into the bot's environment at deploy time — never in source.
 - **Permission gates.** Every slash command requires `write`, `maintain`, or `admin` access. Re-checked per command, never cached.
 - **Bot is read-only against user repos.** All release writes (commits, tags, GitHub Releases) happen via a separate GitHub Action in the user's own CI with their `GITHUB_TOKEN` — under their audit log, with their branch protections intact.
 - **Human-in-the-loop.** No release happens without an explicit `/approve` from a permitted user.
@@ -13,9 +13,9 @@
 
 - **Stateless, no database.** Webhook payloads are processed in-memory and discarded. Installation tokens are short-lived and never stored.
 - **Sent to OpenRouter (AI):** conventional-commit-prefix-stripped PR titles, affected package names, last release version. PR bodies, source code, secrets, and user identifiers beyond what's public on merged PRs are NOT sent.
-- **Logs** (pino structured JSON) retained at Railway's standard retention; may contain transient repo names, PR numbers, GitHub handles. No aggregation, profiling, or sale.
+- **Logs** (pino structured JSON) retained in AWS CloudWatch Logs for 14 days; may contain transient repo names, PR numbers, GitHub handles. No aggregation, profiling, or sale.
 - **Data subject rights.** Uninstalling stops processing immediately. The stateless design means no profile to access, export, or delete. Confidential GDPR/CCPA requests via GitHub private vulnerability reporting.
-- **Cross-border.** Hosted instance: Railway (US); OpenRouter (US). Self-hosters pick their own jurisdiction and AI provider.
+- **Cross-border.** Hosted instance: AWS Lambda in `eu-central-1` (Frankfurt, EU); OpenRouter (US). Self-hosters pick their own jurisdiction and AI provider.
 
 Privacy / Terms / Support: https://github.com/HelicanHQ/tagline-sh/tree/main/docs/legal
 
@@ -42,5 +42,5 @@ No third-party security certifications (SOC 2, ISO 27001, HIPAA, FedRAMP) — sm
 - The human-in-the-loop `/approve` gate is removed or weakened.
 - Compliance posture changes — e.g. SOC 2 audit completed, dedicated DPO appointed.
 - The EU AI Act classification shifts (new Annex III addition affecting developer tools, or a feature is added that automates decisions about people).
-- The hosted infrastructure jurisdiction changes (currently US via Railway).
+- The hosted infrastructure jurisdiction changes (currently EU via AWS `eu-central-1`).
 -->

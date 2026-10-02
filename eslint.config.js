@@ -3,7 +3,7 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['**/dist/**', '**/node_modules/**', '**/*.config.{js,ts,mjs,cjs}', '**/coverage/**'],
+    ignores: ['**/dist/**', '**/dist-lambda/**', '**/cdk.out/**', '**/node_modules/**', '**/*.config.{js,ts,mjs,cjs}', '**/coverage/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

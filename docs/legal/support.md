@@ -30,7 +30,7 @@ Please **do not** open issues on the distribution repository ([`HelicanHQ/taglin
 
 The following are **out of scope** for the hosted instance and the open-source project:
 
-- **Custom deployment configurations** for self-hosters. The [self-hosting guide](../self-hosting.md) covers Docker Compose, Railway, and bare-metal patterns; other patterns are unsupported.
+- **Custom deployment configurations** for self-hosters. The [self-hosting guide](../self-hosting.md) covers Docker Compose, Railway, AWS Lambda, and bare-metal patterns; other patterns are unsupported.
 - **Repository-specific debugging** that requires us to inspect private code. We can debug from logs and reproducible public test cases; we will not request, and cannot read, the contents of private repositories.
 - **AI provider behaviour or quality.** If the AI narrative is poor, that is a function of the model you (or the hosted instance) selected. The deterministic fallback always works.
 - **Custom version-bump policies** outside the conventional-commits-based bump map. We will not debug or support custom policies that users implement in their own repositories.

@@ -160,7 +160,7 @@ This repo ships the MVP. Post-validation roadmap:
 
 ## A note on the hosted instance
 
-The hosted GitHub App is a convenience, not a commitment. It's operated on best-effort basis by the maintainer and may evolve, pause, or sunset based on maintenance load and operational reality. **The self-hosted path is the durable one** — the Action runs entirely inside your CI with your secrets, and the bot is a stateless Node server you can stand up on Railway, Fly, Render, or any Docker host in under fifteen minutes. If the hosted instance ever retires, every Tagline install can switch to self-hosted with a webhook URL change and zero data migration.
+The hosted GitHub App is a convenience, not a commitment. It's operated on best-effort basis by the maintainer and may evolve, pause, or sunset based on maintenance load and operational reality. **The self-hosted path is the durable one** — the Action runs entirely inside your CI with your secrets, and the bot is a stateless Node server you can stand up on AWS Lambda (about $0/month on the free tier), Railway, Fly, Render, or any Docker host in under fifteen minutes. If the hosted instance ever retires, every Tagline install can switch to self-hosted with a webhook URL change and zero data migration.
 
 > [!NOTE]
 > There's no database, stateless, plain and simple

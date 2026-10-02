@@ -2,3 +2,5 @@
 **/node_modules/**
 **/coverage/**
 pnpm-lock.yaml
+**/dist-lambda/**
+**/cdk.out/**

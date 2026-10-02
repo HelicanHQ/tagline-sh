@@ -11,3 +11,7 @@ coverage/
 *.tsbuildinfo
 
 private-key.pem
+
+# CDK
+cdk.out/
+dist-lambda/
