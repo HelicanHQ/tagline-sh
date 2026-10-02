@@ -2,7 +2,7 @@
 
 <!-- > **DRAFT — review with counsel before publishing.** This file is the working source for the policy that will be served at `tagline.helican.io/privacy`. Operational details (subprocessors, AI provider, hosting provider) reflect the configuration in place on the effective date and will be updated as the hosted instance evolves. -->
 
-**Effective date:** 2026-05-21
+**Effective date:** 2026-10-02
 **Operator:** HelicanHQ ("we", "us", "Tagline") — the maintainer of Tagline and related developer tooling
 **Contact:** see [Contact](#contact) below. Tagline does not maintain dedicated mail addresses; all contact channels are GitHub-native.
 
@@ -33,7 +33,7 @@ Tagline is stateless by design. We do not operate a database. We do not persist:
 - Any user identifier, beyond what appears in transient request logs
 - GitHub App installation tokens (these are short-lived and discarded after each request)
 
-Operational logs (structured JSON via [pino](https://getpino.io)) may contain transient references to repository names, PR numbers, and GitHub handles for the duration of standard log retention on our hosting provider. We do not aggregate, profile, or sell this data.
+Operational logs (structured JSON via [pino](https://getpino.io)) may contain transient references to repository names, PR numbers, and GitHub handles for 14 days (the log retention configured on our hosting provider), after which they are deleted. We do not aggregate, profile, or sell this data.
 
 ## Third-party processors
 
@@ -51,7 +51,7 @@ If you **self-host** the bot (a fully supported configuration — see [self-host
 
 The hosted instance currently relies on the following infrastructure providers:
 
-- [Railway](https://railway.app) — application hosting and TLS termination
+- [Amazon Web Services](https://aws.amazon.com) — application hosting (AWS Lambda), TLS termination, secret storage, and logs, in the `eu-central-1` (Frankfurt, EU) region
 - [OpenRouter](https://openrouter.ai) — AI model routing for release narrative generation
 - GitHub, Inc. — webhook delivery and API access (governed by [GitHub's privacy practices](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement))
 
@@ -70,7 +70,7 @@ If you have specific GDPR, CCPA, or other jurisdictional requests, please use th
 ## Security
 
 - All traffic between GitHub and the bot is over TLS, with GitHub's signed webhook payloads verified against the App's webhook secret.
-- The bot's GitHub App private key is stored as a secret at the hosting provider and is not committed to source control.
+- The bot's GitHub App private key is stored in AWS Secrets Manager and is not committed to source control.
 - The release action runs entirely inside your GitHub Actions environment; we have no access to your repository's secrets.
 
 We do not currently maintain a formal bug-bounty programme, but security reports are welcomed via GitHub's [private vulnerability reporting](https://github.com/HelicanHQ/tagline-sh/security/advisories/new). Please give us a reasonable disclosure window before public posting.
