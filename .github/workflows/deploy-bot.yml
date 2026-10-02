@@ -42,6 +42,16 @@ jobs:
             - name: Build bot Lambda bundle
               run: pnpm --filter @tagline-sh/shared build && pnpm --filter @tagline-sh/bot build
 
+            - name: Reject browser builds in bundle
+              # Old @octokit deps ship a `module` field pointing at dist-web/ builds. If the
+              # bundler resolves those, universal-github-app-jwt rejects GitHub's PKCS#1 keys
+              # and every API call fails. tsup.config.ts forces `main` first; this guards it.
+              run: |
+                  if grep -q '/dist-web/' apps/bot/dist-lambda/index.mjs; then
+                      echo "::error::dist-lambda bundle contains dist-web builds. Check mainFields in apps/bot/tsup.config.ts."
+                      exit 1
+                  fi
+
             - uses: aws-actions/configure-aws-credentials@v4
               with:
                   role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
