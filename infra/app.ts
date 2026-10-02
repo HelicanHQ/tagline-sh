@@ -1,5 +1,13 @@
 import { fileURLToPath } from 'node:url';
-import { App, CfnOutput, Duration, SecretValue, Stack, type StackProps } from 'aws-cdk-lib';
+import {
+    App,
+    CfnOutput,
+    Duration,
+    RemovalPolicy,
+    SecretValue,
+    Stack,
+    type StackProps,
+} from 'aws-cdk-lib';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
@@ -39,6 +47,7 @@ class BotStack extends Stack {
             timeout: Duration.seconds(60),
             logGroup: new logs.LogGroup(this, 'BotLogs', {
                 retention: logs.RetentionDays.TWO_WEEKS,
+                removalPolicy: RemovalPolicy.DESTROY,
             }),
             environment: {
                 NODE_ENV: 'production',
