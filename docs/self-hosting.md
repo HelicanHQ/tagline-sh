@@ -64,6 +64,36 @@ Railway is the recommended hosted target. Tagline ships a [`railway.json`](../ra
 
 The Dockerfile's restart policy is governed by `railway.json` (`ON_FAILURE`, max 10 retries) — a crash loop stops after 10 attempts instead of churning indefinitely.
 
+### With AWS Lambda
+
+The cheapest path. Webhook traffic sits well inside Lambda's permanent free tier, so the bill is about $0.40/month (one Secrets Manager secret). [`infra/app.ts`](../infra/app.ts) is a CDK app that deploys the bot to a Lambda Function URL (HTTPS included, no load balancer) in `eu-central-1`. Edit `REGION` and `GITHUB_REPO` at the top of that file for your fork.
+
+1. **Store the secrets** as one JSON secret named `tagline/bot`. This reads the PEM straight from the file, so it never goes through your clipboard or shell history:
+
+    ```bash
+    aws secretsmanager create-secret --region eu-central-1 --name tagline/bot --secret-string "$(
+      jq -n --arg a "$APP_ID" --arg w "$WEBHOOK_SECRET" --arg k "$AI_API_KEY" --rawfile p private-key.pem \
+        '{APP_ID: $a, WEBHOOK_SECRET: $w, PRIVATE_KEY: $p, AI_API_KEY: $k}')"
+    ```
+
+2. **Build and deploy:**
+
+    ```bash
+    pnpm install
+    pnpm --filter @tagline-sh/shared build && pnpm --filter @tagline-sh/bot build   # writes apps/bot/dist-lambda
+    cd infra
+    pnpm exec cdk bootstrap        # once per account/region
+    pnpm exec cdk deploy --all
+    ```
+
+    The `TaglineBot` stack prints `WebhookUrl`. Point the GitHub App's webhook at it.
+
+3. **Continuous deploys (optional).** The `TaglineDeployAccess` stack creates a GitHub OIDC role and prints `DeployRoleArn`. Set it as the repo variable `AWS_DEPLOY_ROLE_ARN`, and [`.github/workflows/deploy-bot.yml`](../.github/workflows/deploy-bot.yml) will redeploy on every merge to `main` that touches the bot.
+
+Secret values are resolved at deploy time. After changing `tagline/bot`, redeploy to pick them up.
+
+On Lambda the bot handles each webhook before responding. A slow AI call on `/release-report` can push that past GitHub's 10s limit, so the delivery shows as timed out in the App's "Advanced" tab. The invocation keeps running and still posts the comment.
+
 ### Without Docker
 
 ```bash

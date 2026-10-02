@@ -1,0 +1,51 @@
+name: Deploy bot
+
+# Deploys the bot Lambda (infra/app.ts → TaglineBot stack) on every merge to main
+# that touches the bot. AWS access is via OIDC: no stored AWS keys.
+# Requires repo variable AWS_DEPLOY_ROLE_ARN (output of the TaglineDeployAccess stack).
+
+on:
+    push:
+        branches: [main]
+        paths:
+            - 'apps/bot/**'
+            - 'packages/shared/**'
+            - 'infra/**'
+            - 'pnpm-lock.yaml'
+    workflow_dispatch:
+
+concurrency:
+    group: deploy-bot
+    cancel-in-progress: false
+
+permissions:
+    id-token: write
+    contents: read
+
+jobs:
+    deploy:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 10.22.0
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: '24'
+                  cache: 'pnpm'
+
+            - run: pnpm install --frozen-lockfile
+
+            - name: Build bot Lambda bundle
+              run: pnpm --filter @tagline-sh/shared build && pnpm --filter @tagline-sh/bot build
+
+            - uses: aws-actions/configure-aws-credentials@v4
+              with:
+                  role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+                  aws-region: eu-central-1
+
+            - name: Deploy
+              run: pnpm --filter @tagline-sh/infra exec cdk deploy TaglineBot --require-approval never
