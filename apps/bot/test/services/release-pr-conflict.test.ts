@@ -88,7 +88,7 @@ describe('findOpenReleasePR', () => {
         });
     });
 
-    it('uses the monorepo event-id when nextVersion is date-keyed', async () => {
+    it('uses the issue-keyed monorepo event id', async () => {
         // Explicit param typing on the fake so `.mock.calls[0]?.[0]` is the
         // input shape, not `never` from empty-tuple parameter inference.
         const pullsList: ConflictCheckOctokit['rest']['pulls']['list'] = vi.fn(async () => ({
@@ -96,11 +96,11 @@ describe('findOpenReleasePR', () => {
         }));
         const octokit = makeOctokit(pullsList);
 
-        await findOpenReleasePR(makePlan({ nextVersion: 'event-2026-05-21' }), octokit);
+        await findOpenReleasePR(makePlan({ nextVersion: 'event-i5' }), octokit);
 
         const mockCalls = (pullsList as unknown as { mock: { calls: Array<[unknown]> } }).mock
             .calls;
         const args = mockCalls[0]?.[0] as { head?: string } | undefined;
-        expect(args?.head).toBe('helicanhq:release/vevent-2026-05-21');
+        expect(args?.head).toBe('helicanhq:release/event-i5');
     });
 });

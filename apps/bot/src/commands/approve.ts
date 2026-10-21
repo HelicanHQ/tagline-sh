@@ -176,6 +176,7 @@ export async function buildApprovePlan(
         octokit: input.octokit,
         owner: input.owner,
         repo: input.repo,
+        issueNumber: input.issueNumber,
     };
     if (input.command.branchOverride) reportInput.branch = input.command.branchOverride;
     if (input.ai) reportInput.ai = input.ai;

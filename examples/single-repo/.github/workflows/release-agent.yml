@@ -21,13 +21,13 @@ on:
     workflow_dispatch:
         inputs:
             release_plan:
-                description: "Release plan (provided by Tagline bot)"
+                description: 'Release plan (provided by Tagline bot)'
                 required: true
                 type: string
             issue_number:
                 required: false
                 type: string
-                default: ""
+                default: ''
             dry_run:
                 required: false
                 type: boolean
@@ -37,6 +37,10 @@ on:
         # finalizes alpha/rc releases that merge into them, not just stable.
         # e.g. branches: [main, staging, development]
         branches: [main, master]
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.repository }}
+    cancel-in-progress: false
 
 jobs:
     release:

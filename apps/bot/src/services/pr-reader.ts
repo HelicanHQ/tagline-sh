@@ -161,13 +161,10 @@ export async function getCurrentVersion(
  * Merged PRs targeting `branch`, since the last release tag (or all PRs if no
  * tag exists yet — i.e. this is the first release).
  *
- * Filters out the bot's own previous release PRs (head ref starts with
- * `release/v…`). The tag for `vN` lives on the *release-branch tip*, which is
- * older than the merge commit that lands the release PR on the production
- * branch — so the previous release PR satisfies `merged > tag.commitDate` and
- * would otherwise become the only "change" picked up next time. Worse, its
- * body is the previous changelog full of `#N` references that get extracted
- * as tickets, producing a single mega-bullet with every prior PR linked.
+ * Filters out the bot's own previous release PRs (`release/v…` for a single
+ * repo, `release/event-…` for a monorepo). This remains a defensive boundary
+ * even when the tag timestamp would exclude the PR: release automation is not
+ * a user change and its changelog-heavy body must never be parsed as tickets.
  */
 export async function getPRsSinceLastTag(
     reader: GitHubReader,

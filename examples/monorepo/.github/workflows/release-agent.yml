@@ -9,7 +9,7 @@ name: Tagline Release Agent
 #
 #   - Phase A (propose): triggered by `workflow_dispatch` when you `/approve`.
 #     The action bumps per-package versions, writes per-package CHANGELOGs,
-#     pushes a `release/vevent-YYYY-MM-DD` branch, and opens a release PR.
+#     pushes a `release/event-i<issue-number>` branch, and opens a release PR.
 #     **No tags or GitHub Releases are created in this phase.**
 #
 #   - Phase B (finalize): triggered by `push` to the production branch. When
@@ -26,13 +26,13 @@ on:
     workflow_dispatch:
         inputs:
             release_plan:
-                description: "Release plan (provided by Tagline bot)"
+                description: 'Release plan (provided by Tagline bot)'
                 required: true
                 type: string
             issue_number:
                 required: false
                 type: string
-                default: ""
+                default: ''
             dry_run:
                 required: false
                 type: boolean
@@ -42,6 +42,10 @@ on:
         # finalizes alpha/rc releases that merge into them, not just stable.
         # e.g. branches: [main, staging, development]
         branches: [main, master]
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.repository }}
+    cancel-in-progress: false
 
 jobs:
     release:

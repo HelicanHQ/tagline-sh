@@ -30,7 +30,7 @@ Copy [`examples/single-repo/.github/workflows/release-agent.yml`](../examples/si
 The workflow has **two triggers**, one per release phase:
 
 - `workflow_dispatch` — fires when you `/approve`. Runs **Phase A (propose)**: bumps versions, writes CHANGELOG, opens the release PR. No tag, no GitHub Release.
-- `push` (on `main`/`master`) — fires on every push to the production branch. The action self-filters: it runs the full **Phase B (finalize)** path only when the head commit is the merge of a `release/v*` PR, and no-ops cleanly on every other push. Phase B uses `push` rather than `pull_request: closed` because GitHub's anti-recursion behavior suppresses `pull_request` events on PRs the action itself opened.
+- `push` (on `main`/`master`) — fires on every push to the production branch. The action self-filters: it runs the full **Phase B (finalize)** path only when the head commit is the merge of a `release/*` PR, and no-ops cleanly on every other push. Phase B uses `push` rather than `pull_request: closed` because GitHub's anti-recursion behavior suppresses `pull_request` events on PRs the action itself opened.
 
 Phase A is reversible (close the PR to cancel). Phase B is the publishing step. Nothing ships until you merge.
 

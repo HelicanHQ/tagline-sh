@@ -115,19 +115,10 @@ export function buildPackagePlans(input: BuildPackagePlansInput): PackageRelease
 }
 
 /**
- * Release-event identifier used for monorepo branch and `nextVersion`. We use
- * the UTC date because (a) it's human-readable, (b) it sorts naturally, and
- * (c) it's stable across the bot/action handoff. Multiple releases on the
- * same day pick up a `-2`, `-3` suffix at the action's branch-checkout step
- * (see `git-operations.ts`).
- *
- * The format is `event-YYYY-MM-DD` rather than just the date so the branch
- * `release/vevent-2026-05-19` still matches `isReleaseBranch()` AND is
- * visually distinguishable from a single-repo version like `release/v1.5.0`.
+ * Stable monorepo release-event identifier. The canonical release issue is
+ * unique within the repository and survives retries, including retries on a
+ * later day, so it is a better idempotency key than the current date.
  */
-export function monorepoEventId(now: Date = new Date()): string {
-    const yyyy = now.getUTCFullYear();
-    const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
-    const dd = String(now.getUTCDate()).padStart(2, '0');
-    return `event-${yyyy}-${mm}-${dd}`;
+export function monorepoEventId(issueNumber: number): string {
+    return `event-i${issueNumber}`;
 }

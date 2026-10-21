@@ -1,5 +1,5 @@
 import { simpleGit, type SimpleGit } from 'simple-git';
-import { BOT_GIT_IDENTITY, releaseBranchName, releaseTagName } from '@tagline-sh/shared';
+import { BOT_GIT_IDENTITY, releaseBranchName, releaseDisplayName } from '@tagline-sh/shared';
 import type { ReleasePlan } from '@tagline-sh/shared';
 
 export interface CommitAndPushResult {
@@ -47,10 +47,10 @@ export async function commitAndPushBranch(
     await git.checkoutLocalBranch(branch);
     await git.add(['-A']);
 
-    // Commit message names the event tag — for single-repo this is the
-    // semver version, for monorepo this is the date-keyed event identifier.
-    const headlineTag = releaseTagName(plan.nextVersion);
-    const commit = await git.commit(`chore(release): ${headlineTag} [skip ci]`);
+    // Commit message names the release — for single-repo this is the semver
+    // version, for monorepo this is the issue-keyed event identifier.
+    const releaseName = releaseDisplayName(plan.nextVersion);
+    const commit = await git.commit(`chore(release): ${releaseName} [skip ci]`);
 
     if (!deps.skipPush) {
         await git.push(['-u', 'origin', branch]);
@@ -77,11 +77,16 @@ export interface TagMergeOctokit {
                 ref: string;
                 sha: string;
             }) => Promise<{ data: { ref: string } }>;
-            getRef?: (params: {
+            getRef: (params: {
                 owner: string;
                 repo: string;
                 ref: string;
-            }) => Promise<{ data: { object: { sha: string } } }>;
+            }) => Promise<{ data: { object: { sha: string; type?: string } } }>;
+            getTag: (params: {
+                owner: string;
+                repo: string;
+                tag_sha: string;
+            }) => Promise<{ data: { object: { sha: string; type: string } } }>;
         };
     };
 }
@@ -96,8 +101,9 @@ export interface TagMergeResult {
 /**
  * Phase B — finalize.
  *
- * Create one annotated-ref per tag at `sha` via the GitHub API. Skips tags
- * that already exist (idempotent re-runs).
+ * Create one ref per tag at `sha` via the GitHub API. Existing tags are only
+ * idempotent when they resolve to the same commit; a tag at another commit is
+ * a release-integrity conflict and fails before any missing tags are written.
  *
  * Why Octokit instead of simple-git: in Phase B the workspace may not even
  * be checked out at the right SHA — `pull_request: closed` doesn't auto-
@@ -110,7 +116,21 @@ export async function tagMergeCommit(
 ): Promise<TagMergeResult> {
     const created: string[] = [];
     const skipped: string[] = [];
+    const missing: string[] = [];
+
     for (const tag of input.tags) {
+        const existingSha = await resolveTagCommit(input.repoOwner, input.repoName, tag, octokit);
+        if (existingSha === null) {
+            missing.push(tag);
+            continue;
+        }
+        if (existingSha !== input.sha) {
+            throw tagConflict(tag, existingSha, input.sha);
+        }
+        skipped.push(tag);
+    }
+
+    for (const tag of missing) {
         try {
             await octokit.rest.git.createRef({
                 owner: input.repoOwner,
@@ -121,9 +141,16 @@ export async function tagMergeCommit(
             created.push(tag);
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            // GitHub returns 422 "Reference already exists" when the tag is
-            // already there. Treat as idempotent skip; surface anything else.
             if (/already exists/i.test(message)) {
+                const existingSha = await resolveTagCommit(
+                    input.repoOwner,
+                    input.repoName,
+                    tag,
+                    octokit,
+                );
+                if (existingSha !== input.sha) {
+                    throw tagConflict(tag, existingSha ?? '<missing>', input.sha);
+                }
                 skipped.push(tag);
                 continue;
             }
@@ -131,4 +158,49 @@ export async function tagMergeCommit(
         }
     }
     return { created, skipped };
+}
+
+async function resolveTagCommit(
+    owner: string,
+    repo: string,
+    tag: string,
+    octokit: TagMergeOctokit,
+): Promise<string | null> {
+    let refObject: { sha: string; type?: string };
+    try {
+        const ref = await octokit.rest.git.getRef({ owner, repo, ref: `tags/${tag}` });
+        refObject = ref.data.object;
+    } catch (err) {
+        if (isStatus(err, 404)) return null;
+        throw err;
+    }
+
+    if (refObject.type !== 'tag') return refObject.sha;
+
+    const annotated = await octokit.rest.git.getTag({
+        owner,
+        repo,
+        tag_sha: refObject.sha,
+    });
+    // shortcut: tag-of-tag chains fail closed; recurse here if Tagline ever creates them.
+    if (annotated.data.object.type !== 'commit') {
+        throw new Error(`Tag ${tag} does not resolve directly to a commit.`);
+    }
+    return annotated.data.object.sha;
+}
+
+function tagConflict(tag: string, actualSha: string, expectedSha: string): Error {
+    return new Error(
+        `Tag ${tag} already exists at ${actualSha}, expected ${expectedSha}. ` +
+            'Refusing to publish a release for the wrong commit.',
+    );
+}
+
+function isStatus(err: unknown, status: number): boolean {
+    return (
+        typeof err === 'object' &&
+        err !== null &&
+        'status' in err &&
+        (err as { status?: number }).status === status
+    );
 }

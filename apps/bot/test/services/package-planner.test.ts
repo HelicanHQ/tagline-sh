@@ -1,10 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { BumpType, MonorepoInfo, ParsedPR, RepoConfig } from '@tagline-sh/shared';
 import { DEFAULT_CONFIG } from '@tagline-sh/shared';
-import {
-    buildPackagePlans,
-    monorepoEventId,
-} from '../../src/services/package-planner.js';
+import { buildPackagePlans, monorepoEventId } from '../../src/services/package-planner.js';
 
 function makePR(opts: { number: number; bump: BumpType; commitType?: string }): ParsedPR {
     return {
@@ -143,7 +140,7 @@ describe('buildPackagePlans — semver', () => {
         expect(api.bumpType).toBe('patch');
     });
 
-    it('renders a deterministic per-package changelog entry referencing only that package\'s PRs', () => {
+    it("renders a deterministic per-package changelog entry referencing only that package's PRs", () => {
         const info = semverMonorepo({
             api: { current: '1.0.0', prs: [makePR({ number: 71, bump: 'minor' })] },
             ui: { current: '0.5.0', prs: [makePR({ number: 72, bump: 'patch' })] },
@@ -189,7 +186,7 @@ describe('buildPackagePlans — calver', () => {
         expect(plans[0]!.nextVersion).toBe('2026.5.0');
     });
 
-    it('per-package MICRO increments independently (the user\'s key example)', () => {
+    it("per-package MICRO increments independently (the user's key example)", () => {
         // api had its first May release (MICRO=0); ui hasn't released in May yet.
         // Today both ship.
         const info = semverMonorepo({
@@ -310,8 +307,8 @@ describe('buildPackagePlans — incremental', () => {
 });
 
 describe('monorepoEventId', () => {
-    it('returns event-YYYY-MM-DD in UTC', () => {
-        const id = monorepoEventId(new Date(Date.UTC(2026, 4, 19, 23, 30, 0)));
-        expect(id).toBe('event-2026-05-19');
+    it('uses the canonical release issue as a stable idempotency key', () => {
+        expect(monorepoEventId(42)).toBe('event-i42');
+        expect(monorepoEventId(43)).toBe('event-i43');
     });
 });

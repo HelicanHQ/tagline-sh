@@ -42,26 +42,34 @@ export function extractTickets(text: string): string[] {
 }
 
 /**
- * Prefix every release branch shares (`release/v…`). Used by readers that need
+ * Prefix every release branch shares (`release/…`). Used by readers that need
  * to recognize bot-authored release PRs without depending on a specific version
  * string.
  */
-export const RELEASE_BRANCH_PREFIX = 'release/v';
+export const RELEASE_BRANCH_PREFIX = 'release/';
 
-/** Branch name used for the release PR. e.g. `release/v1.2.3` */
-export function releaseBranchName(version: string): string {
-    const stripped = version.startsWith('v') ? version.slice(1) : version;
-    return `${RELEASE_BRANCH_PREFIX}${stripped}`;
+/** Branch name used for the release PR. e.g. `release/v1.2.3` or `release/event-i42`. */
+export function releaseBranchName(identifier: string): string {
+    return `${RELEASE_BRANCH_PREFIX}${releaseDisplayName(identifier)}`;
+}
+
+/** Human-readable release identifier. Event IDs are not versions and never receive a `v`. */
+export function releaseDisplayName(identifier: string): string {
+    if (identifier.startsWith('event-')) return identifier;
+    return identifier.startsWith('v') ? identifier : `v${identifier}`;
 }
 
 /**
  * Returns true if `headRef` looks like one of our own release branches
- * (`release/v1.2.3`, `release/v2026.05.0-rc.0`, etc.). Used to filter the
+ * (`release/v1.2.3`, `release/event-i42`, etc.). Used to filter the
  * previous release PR out of the next release's changelog — its body is the
  * old changelog and would otherwise leak hundreds of `#N` refs as tickets.
  */
 export function isReleaseBranch(headRef: string): boolean {
-    return headRef.startsWith(RELEASE_BRANCH_PREFIX);
+    return (
+        headRef.startsWith(`${RELEASE_BRANCH_PREFIX}v`) ||
+        headRef.startsWith(`${RELEASE_BRANCH_PREFIX}event-`)
+    );
 }
 
 /** Tag name written by the action. e.g. `v1.2.3` */
@@ -129,7 +137,7 @@ export function excerpt(text: string | null | undefined, maxLen = 500): string |
  *     - {highlight 2}
  */
 export function buildSummaryMarkdown(summary: ReleaseSummary): string {
-    const version = summary.version.startsWith('v') ? summary.version : `v${summary.version}`;
+    const version = releaseDisplayName(summary.version);
     return [
         `## What's new in ${version} · ${summary.date}`,
         '',

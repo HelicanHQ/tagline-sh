@@ -1,7 +1,7 @@
 import {
     APP_DISPLAY_NAME,
     releaseBranchName,
-    releaseTagName,
+    releaseDisplayName,
     type ReleasePlan,
 } from '@tagline-sh/shared';
 
@@ -52,10 +52,10 @@ export async function postCompletionComment(
 ): Promise<void> {
     if (!plan.issueNumber) return;
 
-    const tag = releaseTagName(plan.nextVersion);
+    const releaseName = releaseDisplayName(plan.nextVersion);
     const body = ctx.error
-        ? buildFailureBody(tag, ctx.error)
-        : buildSuccessBody(plan, tag, ctx);
+        ? buildFailureBody(releaseName, ctx.error)
+        : buildSuccessBody(plan, releaseName, ctx);
 
     await octokit.rest.issues.createComment({
         owner: plan.repoOwner,
@@ -77,10 +77,7 @@ function buildSuccessBody(plan: ReleasePlan, tag: string, ctx: CompletionContext
     const phase = ctx.phase ?? 'propose';
 
     if (phase === 'propose') {
-        const lines = [
-            `${APP_DISPLAY_NAME} prepared the release \`${tag}\` 📝`,
-            '',
-        ];
+        const lines = [`${APP_DISPLAY_NAME} prepared the release \`${tag}\` 📝`, ''];
         if (ctx.prUrl) {
             lines.push(`- Release PR: ${ctx.prUrl}`);
         }
@@ -104,7 +101,9 @@ function buildSuccessBody(plan: ReleasePlan, tag: string, ctx: CompletionContext
             const branch = releaseBranchName(plan.nextVersion);
             const compareUrl = `https://github.com/${plan.repoOwner}/${plan.repoName}/compare/${plan.baseBranch}...${branch}`;
             lines.push('');
-            lines.push(`⚠️ The release branch was pushed, but I couldn't open the PR: \`${ctx.prError}\``);
+            lines.push(
+                `⚠️ The release branch was pushed, but I couldn't open the PR: \`${ctx.prError}\``,
+            );
             lines.push('');
             lines.push(`Open it manually: ${compareUrl}`);
             lines.push('');

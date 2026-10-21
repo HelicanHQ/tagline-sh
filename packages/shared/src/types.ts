@@ -254,7 +254,7 @@ export interface ReleasePlan {
      * Per-package release records (M3). Empty for single-repo. Non-empty for
      * monorepos with at least one affected package — the action iterates this
      * array instead of the legacy single-version path. When non-empty,
-     * `nextVersion` becomes a release-event identifier (typically the date)
+     * `nextVersion` becomes an issue-keyed release-event identifier
      * rather than a package version.
      */
     packages: PackageReleasePlan[];

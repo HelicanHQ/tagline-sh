@@ -12,11 +12,13 @@ function statusError(status: number, msg = 'http error'): Error {
     return err;
 }
 
-function makeOctokit(overrides: {
-    getBranch?: ReconcileOctokit['rest']['repos']['getBranch'];
-    pullsList?: ReconcileOctokit['rest']['pulls']['list'];
-    deleteRef?: ReconcileOctokit['rest']['git']['deleteRef'];
-} = {}): ReconcileOctokit {
+function makeOctokit(
+    overrides: {
+        getBranch?: ReconcileOctokit['rest']['repos']['getBranch'];
+        pullsList?: ReconcileOctokit['rest']['pulls']['list'];
+        deleteRef?: ReconcileOctokit['rest']['git']['deleteRef'];
+    } = {},
+): ReconcileOctokit {
     return {
         rest: {
             repos: {
@@ -149,17 +151,15 @@ describe('reconcileReleaseBranch', () => {
             }),
         });
 
-        await expect(reconcileReleaseBranch(makePlan(), octokit)).rejects.toThrow(
-            'internal error',
-        );
+        await expect(reconcileReleaseBranch(makePlan(), octokit)).rejects.toThrow('internal error');
     });
 
-    it('uses the per-package monorepo event tag for the branch name', async () => {
+    it('uses the issue-keyed monorepo event id for the branch name', async () => {
         const octokit = makeOctokit();
-        const monorepoPlan = makePlan({ nextVersion: 'event-2026-05-21' });
+        const monorepoPlan = makePlan({ nextVersion: 'event-i7' });
 
         const result = await reconcileReleaseBranch(monorepoPlan, octokit);
 
-        expect(result.branch).toBe('release/vevent-2026-05-21');
+        expect(result.branch).toBe('release/event-i7');
     });
 });

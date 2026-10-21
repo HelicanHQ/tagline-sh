@@ -3,8 +3,10 @@ import {
     aggregateBumps,
     excerpt,
     extractTickets,
+    isReleaseBranch,
     maxBump,
     releaseBranchName,
+    releaseDisplayName,
     releaseTagName,
 } from '../src/utils.js';
 
@@ -49,6 +51,17 @@ describe('releaseBranchName / releaseTagName', () => {
     it('strips a leading v in branch names', () => {
         expect(releaseBranchName('1.2.3')).toBe('release/v1.2.3');
         expect(releaseBranchName('v1.2.3')).toBe('release/v1.2.3');
+    });
+
+    it('does not pretend a release event is a version', () => {
+        expect(releaseDisplayName('event-i42')).toBe('event-i42');
+        expect(releaseBranchName('event-i42')).toBe('release/event-i42');
+    });
+
+    it('recognizes Tagline version and event branches only', () => {
+        expect(isReleaseBranch('release/v1.2.3')).toBe(true);
+        expect(isReleaseBranch('release/event-i42')).toBe(true);
+        expect(isReleaseBranch('release/customer-hotfix')).toBe(false);
     });
 
     it('always prefixes v in tag names', () => {

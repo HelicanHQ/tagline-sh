@@ -1,5 +1,5 @@
 import type { Context, Probot } from 'probot';
-import { APP_DISPLAY_NAME } from '@tagline-sh/shared';
+import { APP_DISPLAY_NAME, releaseDisplayName } from '@tagline-sh/shared';
 import { buildReleaseReport } from '~/app/commands/release-report';
 import {
     buildApprovePlan,
@@ -167,6 +167,7 @@ async function runReleaseReport(
             octokit: asReader(context.octokit),
             owner: repo.owner,
             repo: repo.repo,
+            issueNumber,
         };
         if (branchOverride) buildOpts.branch = branchOverride;
         const ai = readAIConfig();
@@ -319,14 +320,14 @@ function buildDispatchAckBody(
     plan: Extract<Awaited<ReturnType<typeof buildApprovePlan>>, { ok: true }>['plan'],
     repo: { owner: string; repo: string },
 ): string {
-    const tag = `v${plan.nextVersion}`;
+    const releaseName = releaseDisplayName(plan.nextVersion);
     const workflowsUrl = `https://github.com/${repo.owner}/${repo.repo}/actions/workflows/release-agent.yml`;
     const flags: string[] = [];
     if (plan.isDraft) flags.push('draft');
     if (plan.isDryRun) flags.push('dry-run');
     const flagsLine = flags.length > 0 ? ` (${flags.join(', ')})` : '';
     return [
-        `${APP_DISPLAY_NAME} is releasing \`${tag}\`${flagsLine} — workflow dispatched by @${plan.approvedBy}.`,
+        `${APP_DISPLAY_NAME} is preparing \`${releaseName}\`${flagsLine} — workflow dispatched by @${plan.approvedBy}.`,
         '',
         `Track progress: ${workflowsUrl}`,
     ].join('\n');

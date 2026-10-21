@@ -4,6 +4,7 @@ import {
     buildReleaseIssueClosingCommentBody,
     buildReleaseIssueMonorepoClosingCommentBody,
     releaseBranchName,
+    releaseDisplayName,
     releaseTagName,
     type ReleasePlan,
     type ReleaseResult,
@@ -154,7 +155,7 @@ export async function executeProposeRelease(
     plan: ReleasePlan,
     deps: ExecutorDeps,
 ): Promise<ReleaseResult> {
-    const tag = releaseTagName(plan.nextVersion);
+    const releaseName = releaseDisplayName(plan.nextVersion);
     const branch = releaseBranchName(plan.nextVersion);
     let prUrl: string | null = null;
 
@@ -177,7 +178,7 @@ export async function executeProposeRelease(
             return {
                 success: true,
                 nextVersion: plan.nextVersion,
-                tagName: tag,
+                tagName: releaseName,
                 releaseUrl: null,
                 prUrl: null,
                 error: null,
@@ -224,13 +225,13 @@ export async function executeProposeRelease(
         });
 
         core.setOutput('version', plan.nextVersion);
-        core.setOutput('tag', tag);
+        core.setOutput('tag', releaseName);
         core.setOutput('pr_url', prUrl);
 
         return {
             success: true,
             nextVersion: plan.nextVersion,
-            tagName: tag,
+            tagName: releaseName,
             releaseUrl: null,
             prUrl,
             error: null,
@@ -248,7 +249,7 @@ export async function executeProposeRelease(
         return {
             success: false,
             nextVersion: plan.nextVersion,
-            tagName: tag,
+            tagName: releaseName,
             releaseUrl: null,
             prUrl,
             error: message,
@@ -416,6 +417,8 @@ export async function executeFinalizeRelease(
             core.info('Step 3/3: skipping release-issue close (no issue number in plan)');
         }
 
+        await tryDeleteReleaseBranch(input, deps.octokit);
+
         const primaryTag = payload.tags[0] ?? releaseTagName(payload.nextVersion);
         const primaryUrl = releaseUrls[0] ?? null;
 
@@ -445,6 +448,34 @@ export async function executeFinalizeRelease(
             isDryRun: false,
         };
     }
+}
+
+async function tryDeleteReleaseBranch(
+    input: FinalizeInput,
+    octokit: ExecutorOctokit,
+): Promise<void> {
+    if (!input.headRef.startsWith('release/')) return;
+    try {
+        await octokit.rest.git.deleteRef({
+            owner: input.repoOwner,
+            repo: input.repoName,
+            ref: `heads/${input.headRef}`,
+        });
+        core.info(`  deleted release branch ${input.headRef}`);
+    } catch (err) {
+        if (isStatus(err, 404)) return;
+        const message = err instanceof Error ? err.message : String(err);
+        core.warning(`Could not delete release branch ${input.headRef}: ${message}.`);
+    }
+}
+
+function isStatus(err: unknown, status: number): boolean {
+    return (
+        typeof err === 'object' &&
+        err !== null &&
+        'status' in err &&
+        (err as { status?: number }).status === status
+    );
 }
 
 /**

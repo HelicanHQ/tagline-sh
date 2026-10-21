@@ -21,6 +21,8 @@ function fakeOctokit(): {
         createRef: ReturnType<typeof vi.fn>;
         updateIssue: ReturnType<typeof vi.fn>;
         removeLabel: ReturnType<typeof vi.fn>;
+        getRef: ReturnType<typeof vi.fn>;
+        getTag: ReturnType<typeof vi.fn>;
         getBranch: ReturnType<typeof vi.fn>;
         pullsList: ReturnType<typeof vi.fn>;
         deleteRef: ReturnType<typeof vi.fn>;
@@ -45,6 +47,8 @@ function fakeOctokit(): {
         createRef: vi.fn(async (params: { ref: string }) => ({ data: { ref: params.ref } })),
         updateIssue: vi.fn(async () => ({ data: {} })),
         removeLabel: vi.fn(async () => ({})),
+        getRef: vi.fn(async () => notFound()),
+        getTag: vi.fn(async () => ({ data: { object: { sha: 'merge-sha', type: 'commit' } } })),
         getBranch: vi.fn(async () => notFound()),
         pullsList: vi.fn(async () => ({ data: [] })),
         deleteRef: vi.fn(async () => ({})),
@@ -58,7 +62,12 @@ function fakeOctokit(): {
                 update: calls.updateIssue,
                 removeLabel: calls.removeLabel,
             },
-            git: { createRef: calls.createRef, deleteRef: calls.deleteRef },
+            git: {
+                createRef: calls.createRef,
+                getRef: calls.getRef,
+                getTag: calls.getTag,
+                deleteRef: calls.deleteRef,
+            },
         },
     } as unknown as ExecutorOctokit;
     return { octokit, calls };
@@ -130,7 +139,7 @@ describe('executeProposeRelease — happy path (Phase A)', () => {
         expect(decoded?.releaseBodies[0]).toContain("What's new in v1.5.0");
     });
 
-    it("acknowledgement comment frames the release as a PROPOSAL, not a publication", async () => {
+    it('acknowledgement comment frames the release as a PROPOSAL, not a publication', async () => {
         const { octokit, calls } = fakeOctokit();
         const git = fakeGit();
         await executeProposeRelease(makePlan(), {
@@ -224,7 +233,10 @@ describe('executeFinalizeRelease — happy path (Phase B)', () => {
 
         // GitHub Release was published.
         expect(calls.createRelease).toHaveBeenCalled();
-        const relCall = calls.createRelease.mock.calls[0]?.[0] as { tag_name: string; body: string };
+        const relCall = calls.createRelease.mock.calls[0]?.[0] as {
+            tag_name: string;
+            body: string;
+        };
         expect(relCall.tag_name).toBe('v1.5.0');
         expect(relCall.body).toContain('Released!');
 
@@ -252,6 +264,12 @@ describe('executeFinalizeRelease — happy path (Phase B)', () => {
         };
         expect(updateCall.issue_number).toBe(88);
         expect(updateCall.state).toBe('closed');
+
+        expect(calls.deleteRef).toHaveBeenCalledWith({
+            owner: 'acme',
+            repo: 'widget',
+            ref: 'heads/release/v1.5.0',
+        });
     });
 
     it('skips the release-issue close step when issueNumber=0 (dry-run / legacy plan)', async () => {

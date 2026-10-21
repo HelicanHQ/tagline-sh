@@ -56,11 +56,11 @@ describe('commitAndPushBranch (Phase A — propose)', () => {
         expect(calls.push).not.toHaveBeenCalled();
     });
 
-    it('uses event branch name for monorepo plans (release/vevent-...)', async () => {
+    it('uses the issue-keyed event branch name for monorepo plans', async () => {
         const { git } = fakeGit();
         const plan = makePlan({
             isMonorepo: true,
-            nextVersion: 'event-2026-05-19',
+            nextVersion: 'event-i7',
             packages: [
                 {
                     name: '@acme/api',
@@ -77,25 +77,36 @@ describe('commitAndPushBranch (Phase A — propose)', () => {
             ],
         });
         const result = await commitAndPushBranch(plan, '/tmp/repo', { git });
-        expect(result.branch).toBe('release/vevent-2026-05-19');
+        expect(result.branch).toBe('release/event-i7');
     });
 });
 
-function fakeOctokit(opts: { existing?: string[] } = {}): {
+function fakeOctokit(opts: { existing?: Record<string, string> } = {}): {
     octokit: TagMergeOctokit;
-    calls: { createRef: ReturnType<typeof vi.fn> };
+    calls: { createRef: ReturnType<typeof vi.fn>; getRef: ReturnType<typeof vi.fn> };
 } {
-    const existing = new Set(opts.existing ?? []);
-    const createRef = vi.fn(async (params: { ref: string }) => {
+    const existing = new Map(Object.entries(opts.existing ?? {}));
+    const getRef = vi.fn(async (params: { ref: string }) => {
+        const tag = params.ref.replace(/^tags\//, '');
+        const sha = existing.get(tag);
+        if (!sha) {
+            const err = new Error('Not Found') as Error & { status: number };
+            err.status = 404;
+            throw err;
+        }
+        return { data: { object: { sha, type: 'commit' } } };
+    });
+    const createRef = vi.fn(async (params: { ref: string; sha: string }) => {
         const tag = params.ref.replace(/^refs\/tags\//, '');
         if (existing.has(tag)) {
             throw new Error('Reference already exists');
         }
-        existing.add(tag);
+        existing.set(tag, params.sha);
         return { data: { ref: params.ref } };
     });
-    const octokit = { rest: { git: { createRef } } } as unknown as TagMergeOctokit;
-    return { octokit, calls: { createRef } };
+    const getTag = vi.fn(async () => ({ data: { object: { sha: '', type: 'commit' } } }));
+    const octokit = { rest: { git: { createRef, getRef, getTag } } } as TagMergeOctokit;
+    return { octokit, calls: { createRef, getRef } };
 }
 
 describe('tagMergeCommit (Phase B — finalize)', () => {
@@ -122,7 +133,7 @@ describe('tagMergeCommit (Phase B — finalize)', () => {
     });
 
     it('idempotently skips tags that already exist instead of throwing', async () => {
-        const { octokit } = fakeOctokit({ existing: ['v1.5.0'] });
+        const { octokit } = fakeOctokit({ existing: { 'v1.5.0': 'merge-sha' } });
         const result = await tagMergeCommit(
             {
                 repoOwner: 'acme',
@@ -134,6 +145,80 @@ describe('tagMergeCommit (Phase B — finalize)', () => {
         );
         expect(result.created).toEqual([]);
         expect(result.skipped).toEqual(['v1.5.0']);
+    });
+
+    it('resolves an annotated tag before deciding a retry is safe', async () => {
+        const createRef = vi.fn(async () => ({ data: { ref: '' } }));
+        const getRef = vi.fn(async () => ({
+            data: { object: { sha: 'tag-object-sha', type: 'tag' } },
+        }));
+        const getTag = vi.fn(async () => ({
+            data: { object: { sha: 'merge-sha', type: 'commit' } },
+        }));
+        const octokit = { rest: { git: { createRef, getRef, getTag } } } as TagMergeOctokit;
+
+        const result = await tagMergeCommit(
+            {
+                repoOwner: 'acme',
+                repoName: 'widget',
+                sha: 'merge-sha',
+                tags: ['v1.5.0'],
+            },
+            octokit,
+        );
+
+        expect(result.skipped).toEqual(['v1.5.0']);
+        expect(getTag).toHaveBeenCalledWith({
+            owner: 'acme',
+            repo: 'widget',
+            tag_sha: 'tag-object-sha',
+        });
+        expect(createRef).not.toHaveBeenCalled();
+    });
+
+    it('fails before writing when an existing tag points at another commit', async () => {
+        const { octokit, calls } = fakeOctokit({ existing: { 'v1.5.0': 'wrong-sha' } });
+
+        await expect(
+            tagMergeCommit(
+                {
+                    repoOwner: 'acme',
+                    repoName: 'widget',
+                    sha: 'merge-sha',
+                    tags: ['v1.5.0', 'v1.5.1'],
+                },
+                octokit,
+            ),
+        ).rejects.toThrow(/wrong-sha.*expected merge-sha/);
+        expect(calls.createRef).not.toHaveBeenCalled();
+    });
+
+    it('rechecks the SHA when another run creates the tag after preflight', async () => {
+        const getRef = vi
+            .fn()
+            .mockRejectedValueOnce(Object.assign(new Error('Not Found'), { status: 404 }))
+            .mockResolvedValueOnce({
+                data: { object: { sha: 'merge-sha', type: 'commit' } },
+            });
+        const createRef = vi.fn(async () => {
+            throw new Error('Reference already exists');
+        });
+        const getTag = vi.fn(async () => ({
+            data: { object: { sha: 'merge-sha', type: 'commit' } },
+        }));
+        const octokit = { rest: { git: { createRef, getRef, getTag } } } as TagMergeOctokit;
+
+        const result = await tagMergeCommit(
+            {
+                repoOwner: 'acme',
+                repoName: 'widget',
+                sha: 'merge-sha',
+                tags: ['v1.5.0'],
+            },
+            octokit,
+        );
+
+        expect(result).toEqual({ created: [], skipped: ['v1.5.0'] });
     });
 
     it('creates one ref per package for monorepo finalize', async () => {
@@ -153,10 +238,18 @@ describe('tagMergeCommit (Phase B — finalize)', () => {
     });
 
     it('rethrows non-conflict errors (e.g. permission denied) instead of silently skipping', async () => {
+        const notFound = new Error('Not Found') as Error & { status: number };
+        notFound.status = 404;
+        const getRef = vi.fn(async () => {
+            throw notFound;
+        });
         const createRef = vi.fn(async () => {
             throw new Error('Resource not accessible by integration');
         });
-        const octokit = { rest: { git: { createRef } } } as unknown as TagMergeOctokit;
+        const getTag = vi.fn(async () => ({
+            data: { object: { sha: 'merge-sha', type: 'commit' } },
+        }));
+        const octokit = { rest: { git: { createRef, getRef, getTag } } } as TagMergeOctokit;
         await expect(
             tagMergeCommit(
                 {

@@ -40,7 +40,7 @@ For a monorepo release event, the action:
 4. **Pushes one annotated tag per package** using Changesets convention:
     - `@acme/api@1.5.0` for scoped packages
     - `api@1.5.0` for unscoped packages
-5. **Opens one PR** from `release/vevent-YYYY-MM-DD` → production branch, containing all the bumps and CHANGELOG writes.
+5. **Opens one PR** from `release/event-i<issue-number>` → production branch, containing all the bumps and CHANGELOG writes.
 6. **Posts a completion comment** with the per-package tag list and the "Ready to share" plain-language summary.
 
 Failure mode worth knowing: if **any** package's tag already exists, the action refuses the entire release rather than partially shipping. A half-released monorepo is worse than a failed release.
@@ -117,13 +117,13 @@ Each package advances its own counter by 1, regardless of how many PRs touched i
 
 ## Single-repo vs. monorepo
 
-| Concern             | Single-repo                                           | Monorepo                                                                |
-| ------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------- |
-| Tag                 | One `vX.Y.Z`                                          | One per package: `@scope/name@X.Y.Z`                                    |
-| CHANGELOG           | `<root>/CHANGELOG.md`                                 | `<package>/CHANGELOG.md` per package + `<root>/CHANGELOG.md` aggregator |
-| Approval grammar    | `/approve patch\|minor\|major` or `/approve as X.Y.Z` | `/approve` or `/approve name:bump …`                                    |
-| Release-event ID    | The version itself                                    | A date string `event-YYYY-MM-DD` (used for the release branch only)     |
-| GitHub Release page | One per release                                       | One per release event (aggregates the package list)                     |
+| Concern             | Single-repo                                           | Monorepo                                                                  |
+| ------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------- |
+| Tag                 | One `vX.Y.Z`                                          | One per package: `@scope/name@X.Y.Z`                                      |
+| CHANGELOG           | `<root>/CHANGELOG.md`                                 | `<package>/CHANGELOG.md` per package + `<root>/CHANGELOG.md` aggregator   |
+| Approval grammar    | `/approve patch\|minor\|major` or `/approve as X.Y.Z` | `/approve` or `/approve name:bump …`                                      |
+| Release-event ID    | The version itself                                    | `event-i<issue-number>` (stable across retries, unique per release cycle) |
+| GitHub Release page | One per release                                       | One per release event (aggregates the package list)                       |
 
 ## What changes in the workflow file
 
@@ -136,7 +136,7 @@ The optional [`.release-agent.md`](../examples/monorepo/.release-agent.md) ships
 Worth stating explicitly because the model surprises people:
 
 - **"Monorepo + calver = one shared version per release."** Not true. Calver shares a _calendar_; each package keeps its own MICRO. Two packages released today under `YYYY.MM.MICRO` will share the `YYYY.MM` prefix but each carries its own count of releases-this-period.
-- **"There should be one tag per release event."** Not the model. Tagline cuts one tag per package per release. A 3-package release creates 3 tags (`@acme/api@1.5.0`, `@acme/webapp@2026.5.19`, `@acme/tools@8`). The `release/vevent-YYYY-MM-DD` branch name is an internal artifact for the release PR — it's not a tag.
+- **"There should be one tag per release event."** Not the model. Tagline cuts one tag per package per release. A 3-package release creates 3 tags (`@acme/api@1.5.0`, `@acme/webapp@2026.5.19`, `@acme/tools@8`). The `release/event-i<issue-number>` branch name is an internal artifact for the release PR — it's not a tag.
 - **"Bump words work for every scheme."** No. `patch`/`minor`/`major` (and the `api:minor` override grammar) only apply to `semver`. CalVer and Incremental are mechanical — the version is derived from `now` (calver) or `current + 1` (incremental), not from conventional-commit verbs.
 - **"The root `package.json` version follows the monorepo release."** Tagline leaves the root `package.json` version untouched in monorepo mode. There is no "the version" for a monorepo, only per-package versions. The root `CHANGELOG.md` aggregates release events but is decoupled from any single version string.
 
