@@ -1,5 +1,5 @@
 import type { ReleasePlan } from '@tagline-sh/shared';
-import { releaseBranchName, releaseTagName } from '@tagline-sh/shared';
+import { releaseBranchName, releaseDisplayName } from '@tagline-sh/shared';
 
 export interface OpenPROctokit {
     rest: {
@@ -107,13 +107,13 @@ export async function openReleasePR(
     octokit: OpenPROctokit,
     payload: FinalizePlanPayload,
 ): Promise<OpenPRResult> {
-    const tag = releaseTagName(plan.nextVersion);
+    const releaseName = releaseDisplayName(plan.nextVersion);
     const branch = releaseBranchName(plan.nextVersion);
 
     const res = await octokit.rest.pulls.create({
         owner: plan.repoOwner,
         repo: plan.repoName,
-        title: `chore(release): ${tag}`,
+        title: `chore(release): ${releaseName}`,
         head: branch,
         base: plan.baseBranch,
         body: buildPRBody(plan, payload),

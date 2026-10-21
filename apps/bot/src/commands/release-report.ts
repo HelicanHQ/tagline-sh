@@ -23,6 +23,8 @@ export interface ReleaseReportInput {
     octokit: ReaderOctokit;
     owner: string;
     repo: string;
+    /** Canonical release-tracking issue; doubles as the release idempotency key. */
+    issueNumber: number;
     branch?: string;
     /** Optional AI credentials. If absent, deterministic fallback is used. */
     ai?: { apiKey: string; baseUrl?: string; model?: string };
@@ -76,8 +78,8 @@ export async function buildReleaseReport(input: ReleaseReportInput): Promise<Rel
               );
 
     // M3: monorepos get per-package plans. The aggregate `suggestedVersion`
-    // becomes an event-identifier date instead of a semver version — it
-    // names the release event for the branch (`release/vevent-2026-05-19`)
+    // becomes an issue-keyed event identifier instead of a semver version — it
+    // names the release event for the branch (`release/event-i42`)
     // and the PR title but is not a tag. Per-package tags ship via
     // `packages[*].tagName`. Single-repos keep the historical single-version
     // flow exactly as before.
@@ -85,7 +87,8 @@ export async function buildReleaseReport(input: ReleaseReportInput): Promise<Rel
     let suggestedVersion: string;
     if (monorepoInfo) {
         packages = buildPackagePlans({ monorepoInfo, branch, config, channel, tags });
-        suggestedVersion = packages.length > 0 ? monorepoEventId() : currentVersion;
+        suggestedVersion =
+            packages.length > 0 ? monorepoEventId(input.issueNumber) : currentVersion;
     } else {
         const { lastStableVersion, knownVersions } = deriveLineVersions(tags);
         suggestedVersion = computeChannelVersion({

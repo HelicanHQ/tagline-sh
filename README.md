@@ -58,7 +58,7 @@ Technical Lead comments /approve minor (still on the release issue)
               ↓
    ┌──── Phase A — propose ────────────────────────────────────┐
    │  Action bumps version, writes CHANGELOG.md, pushes the     │
-   │  release/vX.Y.Z branch, opens a release PR.                │
+   │  release/* branch, opens a release PR.                     │
    │  NO tag, NO GitHub Release yet. Acknowledgement comment    │
    │  goes back to the release-tracking issue.                  │
    └────────────────────────────────────────────────────────────┘

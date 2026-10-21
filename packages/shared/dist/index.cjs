@@ -66,6 +66,7 @@ __export(index_exports, {
   packageTagName: () => packageTagName,
   parseReleasePlan: () => parseReleasePlan,
   releaseBranchName: () => releaseBranchName,
+  releaseDisplayName: () => releaseDisplayName,
   releaseTagName: () => releaseTagName,
   restampSummary: () => restampSummary
 });
@@ -149,13 +150,16 @@ function extractTickets(text) {
   for (const match of text.matchAll(projRe)) push(match[0]);
   return out;
 }
-var RELEASE_BRANCH_PREFIX = "release/v";
-function releaseBranchName(version) {
-  const stripped = version.startsWith("v") ? version.slice(1) : version;
-  return `${RELEASE_BRANCH_PREFIX}${stripped}`;
+var RELEASE_BRANCH_PREFIX = "release/";
+function releaseBranchName(identifier) {
+  return `${RELEASE_BRANCH_PREFIX}${releaseDisplayName(identifier)}`;
+}
+function releaseDisplayName(identifier) {
+  if (identifier.startsWith("event-")) return identifier;
+  return identifier.startsWith("v") ? identifier : `v${identifier}`;
 }
 function isReleaseBranch(headRef) {
-  return headRef.startsWith(RELEASE_BRANCH_PREFIX);
+  return headRef.startsWith(`${RELEASE_BRANCH_PREFIX}v`) || headRef.startsWith(`${RELEASE_BRANCH_PREFIX}event-`);
 }
 function releaseTagName(version) {
   return version.startsWith("v") ? version : `v${version}`;
@@ -182,7 +186,7 @@ function excerpt(text, maxLen = 500) {
   return (lastSpace > maxLen * 0.6 ? slice.slice(0, lastSpace) : slice) + "\u2026";
 }
 function buildSummaryMarkdown(summary) {
-  const version = summary.version.startsWith("v") ? summary.version : `v${summary.version}`;
+  const version = releaseDisplayName(summary.version);
   return [
     `## What's new in ${version} \xB7 ${summary.date}`,
     "",
@@ -487,6 +491,7 @@ function buildReleaseIssueMonorepoClosingCommentBody(args) {
   packageTagName,
   parseReleasePlan,
   releaseBranchName,
+  releaseDisplayName,
   releaseTagName,
   restampSummary
 });

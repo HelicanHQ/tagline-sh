@@ -337,6 +337,12 @@ describe('defaultWorkflowYaml', () => {
         expect(yaml).not.toMatch(/deployments: write/);
     });
 
+    it('serializes release runs without cancelling the active run', () => {
+        const yaml = defaultWorkflowYaml();
+        expect(yaml).toContain('group: ${{ github.workflow }}-${{ github.repository }}');
+        expect(yaml).toContain('cancel-in-progress: false');
+    });
+
     it('is embedded verbatim in missingWorkflowComment (single source of truth)', () => {
         // If this fails, the two strings drifted — onboarding PR users and
         // recovery-path users would end up with subtly-different workflows.

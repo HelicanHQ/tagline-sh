@@ -3,6 +3,7 @@ import {
     AI_DEFAULTS,
     buildSummaryMarkdown,
     formatSummaryDate,
+    releaseDisplayName,
     type ParsedCommit,
     type ParsedPR,
     type ReleaseSummary,
@@ -190,7 +191,7 @@ export function buildFallbackSummary(
 
     const date = formatSummaryDate(now);
     const versionLabel = nextVersion.startsWith('v') ? nextVersion.slice(1) : nextVersion;
-    const headline = `v${versionLabel} includes ${prs.length} update${prs.length !== 1 ? 's' : ''}.`;
+    const headline = `${releaseDisplayName(nextVersion)} includes ${prs.length} update${prs.length !== 1 ? 's' : ''}.`;
     const body = 'See the changelog below for the full list of changes.';
 
     // Build rawMarkdown via the same shared helper the action will use — keeps
